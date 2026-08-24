@@ -4,7 +4,7 @@
 ## rule, the coin spawn cadence and cap, the five intents' target selection
 ## and tie-breaks, the truce rule, the random end, and determinism.
 
-import std/[json, strutils]
+import std/json
 import coins/[sim_types, sim, room, kernel, scripted]
 
 var failures = 0
@@ -231,7 +231,9 @@ block:
   sim.cogs[0].intent = inHold
   sim.cogs[1].intent = inHold
   check(sim.coins.len == 0, "initialCoins 0 opens empty")
-  for _ in 0 ..< config.coinSpawnIntervalTicks:
+  ## The first spawn lands on tick `coinSpawnIntervalTicks` itself (t > 0
+  ## and t mod interval == 0), which is the interval-plus-first stepTick.
+  for _ in 0 .. config.coinSpawnIntervalTicks:
     sim.stepTick()
   check(sim.coins.len == 1,
     "one coin per coinSpawnIntervalTicks, got " & $sim.coins.len)

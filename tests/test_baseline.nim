@@ -8,7 +8,7 @@
 ## takes longer than 1 ms per beat; and `honest`'s theft count is 0 in every
 ## one of those episodes.
 
-import std/[json, monotimes, strutils, times]
+import std/[json, monotimes, times]
 import coins/[sim_types, sim, room, scripted]
 
 var failures = 0

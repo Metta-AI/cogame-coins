@@ -10,7 +10,7 @@
 ## can change an outcome; the one place where two seats genuinely contend
 ## (step 3d) is settled by a seeded coin flip, not by slot order.
 
-import std/[hashes, json, strutils]
+import std/[hashes, json]
 import sim_types, room, sim_config, events, kernel, indices
 
 export sim_types, sim_config, events, kernel, indices, room
@@ -207,6 +207,9 @@ proc resolveMovement(sim: var Sim, kernels: array[Seats, Kernel]) =
   var moving: array[Seats, bool]
   var blockedWhy: array[Seats, BlockReason]
   var blockedSeen: array[Seats, bool]
+  var refusedX: array[Seats, int]
+  var refusedY: array[Seats, int]
+  var refused: array[Seats, bool]
   var startX: array[Seats, int]
   var startY: array[Seats, int]
   for slot in 0 ..< Seats:
@@ -225,15 +228,21 @@ proc resolveMovement(sim: var Sim, kernels: array[Seats, Kernel]) =
       continue
     let reducing = reducingDirections(kernels[slot], startX[slot], startY[slot])
     var chosen = -1
-    var sawRestraint = false
     for dir in reducing:
       let step = sim.legalStep(slot, dir, kernels[slot].forbid,
         startX[other], startY[other])
       if step.ok:
         chosen = dir
         break
-      if step.why == brRestraint:
-        sawRestraint = true
+      if step.why == brRestraint and not refused[slot]:
+        ## The cog turned down a step it wanted BECAUSE of the coin standing
+        ## on it. That is the restraint a spectator watches, so it is
+        ## reported whether or not the cog then finds a way round — and it is
+        ## reported at the COIN's cell, which is where the viewer draws the
+        ## hand-off glyph.
+        refused[slot] = true
+        refusedX[slot] = step.x
+        refusedY[slot] = step.y
     if chosen < 0:
       ## Sidestep: the first legal cell among ALL of N, E, S, W, which may
       ## increase the distance. This is what guarantees a restrained cog can
@@ -244,8 +253,10 @@ proc resolveMovement(sim: var Sim, kernels: array[Seats, Kernel]) =
         if step.ok:
           chosen = dir
           break
-        if step.why == brRestraint:
-          sawRestraint = true
+        if step.why == brRestraint and not refused[slot]:
+          refused[slot] = true
+          refusedX[slot] = step.x
+          refusedY[slot] = step.y
     if chosen >= 0:
       moving[slot] = true
       wantDir[slot] = chosen
@@ -253,7 +264,7 @@ proc resolveMovement(sim: var Sim, kernels: array[Seats, Kernel]) =
       wantY[slot] = startY[slot] + MoveDy[chosen]
     else:
       blockedSeen[slot] = true
-      blockedWhy[slot] = if sawRestraint: brRestraint else: brOccupied
+      blockedWhy[slot] = if refused[slot]: brRestraint else: brOccupied
 
   ## c. Swap: cogs never swap through each other.
   if moving[0] and moving[1] and
@@ -282,7 +293,10 @@ proc resolveMovement(sim: var Sim, kernels: array[Seats, Kernel]) =
       sim.cogs[slot].y = wantY[slot]
       sim.cogs[slot].facing = wantDir[slot]
       sim.cogs[slot].stepCd = sim.config.stepCooldownTicks
-    elif blockedSeen[slot]:
+    if refused[slot]:
+      sim.events.add(blockedEvent(sim.tick, slot, refusedX[slot],
+        refusedY[slot], brRestraint))
+    if blockedSeen[slot] and blockedWhy[slot] != brRestraint:
       sim.events.add(blockedEvent(sim.tick, slot, startX[slot], startY[slot],
         blockedWhy[slot]))
 

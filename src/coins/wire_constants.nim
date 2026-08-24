@@ -19,12 +19,12 @@ proc jsIntArray(values: openArray[int]): string =
     result.add $v
   result.add "]"
 
+# Emitted under BOTH names. `client/chrome_common.js` and
+# `client/broadcast_core.js` are copied BYTE-FOR-BYTE from coworld-ctf and
+# read `window.CTF_WIRE` — that literal is inside the files this repo is
+# required not to touch — so `CTF_WIRE` is the canonical object and
+# `COINS_WIRE` is the alias the appended Coins game block reads.
 const WireConstantsJs* =
-  ## Emitted under BOTH names. `client/chrome_common.js` and
-  ## `client/broadcast_core.js` are copied BYTE-FOR-BYTE from coworld-ctf and
-  ## read `window.CTF_WIRE` — that literal is inside the files this repo is
-  ## required not to touch — so `CTF_WIRE` is the canonical object and
-  ## `COINS_WIRE` is the alias the appended Coins game block reads.
   "window.CTF_WIRE={speeds:" & jsIntArray(PlaybackSpeeds) &
   ",fps:" & $TargetFps &
   ",chromeSpriteId:" & $BroadcastChromeSpriteId &

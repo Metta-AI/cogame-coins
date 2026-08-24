@@ -11,7 +11,7 @@
 ## every event and the full `results` object — is in the file, so the viewer
 ## contacts no server except S3 for the `.replay` bytes.
 
-import std/[json, math, strutils]
+import std/[json, math]
 import sim_types, sim_config, sim, indices, room
 
 const ReplayProtocol* = "coins.replay.v1"

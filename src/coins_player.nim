@@ -43,8 +43,14 @@ when isMainModule:
   var policy = getEnv("COWORLD_POLICY_NAME").strip()
   if policy.len == 0:
     policy = getEnv("PLAYER_NAME").strip()
-  if policy.len == 0 and scripted.len > 0:
-    policy = "coins-" & scripted.replace("-", "")
+  if policy.len == 0:
+    ## The label the game records in `results.names[]` and the replay's
+    ## `policyNames[]` when the platform supplies none. A scripted seat names
+    ## its baseline; a prompt seat is just "coins-player" until an uploaded
+    ## policy overrides it.
+    policy =
+      if scripted.len > 0: "coins-" & scripted.replace("-", "")
+      else: "coins-player"
 
   proc promptFrame(): string =
     $ %*{"type": "prompt", "prompt": prompt, "scripted": scripted,

@@ -56,7 +56,7 @@ let wide = "\u4e2d"                   ## 3 bytes, 1 rune
 let sayFixture = wide.repeat(MaxSayLen + 12)
 let notesFixture = wide.repeat(MaxNotesLen + 25)
 
-var sim = initSim(certConfig(7))
+var episode = initSim(certConfig(7))
 block:
   proc now(): float {.closure.} = 0.0
   proc decide(view: Sim, seats: seq[int]): seq[Decision] {.closure.} =
@@ -66,15 +66,15 @@ block:
         intent: scriptedIntent(kinds[slot], view.buildObservation(slot),
           view.config.punishThreshold, view.config.punishBeats),
         source: (if slot == 0: osLlm else: osScripted),
-        ## Both free-text fields arrive already rune-truncated, exactly as
-        ## `parseDecision` produces them.
+        # Both free-text fields arrive already rune-truncated, exactly as
+        # `parseDecision` produces them.
         say: cleanSay(sayFixture),
         notes: cleanNotes(notesFixture)))
-  sim.policyNames = ["coins-truce", "coins-reciprocator"]
-  sim.runEpisode(decide, now)
+  episode.policyNames = ["coins-truce", "coins-reciprocator"]
+  episode.runEpisode(decide, now)
 
-let bytes = replayBytes(sim)
-let resultsBytes = $sim.resultsJson()
+let bytes = replayBytes(episode)
+let resultsBytes = $episode.resultsJson()
 let dir = getTempDir() / "coins-test-replay"
 createDir(dir)
 writeFile(dir / "replay.json", bytes)
@@ -171,7 +171,7 @@ check(results{"reason"}.getStr() == "beat_cap",
 check(results{"win"}.len == 2, "results.win.len == 2")
 check(results{"restraint"}.len == 2, "results.restraint.len == 2")
 
-check($parseJson(resultsBytes) == $sim.resultsJson(),
+check($parseJson(resultsBytes) == $episode.resultsJson(),
   "results.json round-trips")
 
 # ---------------------------------------------------------------------------
@@ -185,7 +185,7 @@ block:
   player.seek(player.maxTick())
   check(player.tick == ticksPlayed - 1, "a seek is an array index")
   let frame = player.frame()
-  check(frame.sc[0] == sim.cogs[0].score and frame.sc[1] == sim.cogs[1].score,
+  check(frame.sc[0] == episode.cogs[0].score and frame.sc[1] == episode.cogs[1].score,
     "the last frame carries the final scores")
   player.seek(0)
   var advanced = 0

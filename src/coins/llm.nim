@@ -18,7 +18,7 @@
 ## deterministic.
 
 import
-  std/[json, math, os, strutils, times, unicode],
+  std/[json, os, strutils, times],
   bitworld/runtime,
   curly,
   sim, scripted

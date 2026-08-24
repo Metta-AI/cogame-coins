@@ -188,11 +188,11 @@ block:
 var expected = @["t", "mt", "ph", "pl", "sp", "mx", "st", "lp", "sk", "ff",
   "en", "mm", "bs", "pov", "teams", "roster", "events", "lead", "beats",
   "lulls", "over", "hold", "cn"]
-expected.sort(cmp)
+sort(expected)
 var seenList: seq[string]
 for key in seenKeys:
   seenList.add(key)
-seenList.sort(cmp)
+sort(seenList)
 check(seenList == expected,
   "buildStateJson emits exactly the inherited chrome key set plus `cn`.\n" &
   "  expected: " & expected.join(",") & "\n  got:      " & seenList.join(","))
@@ -204,7 +204,7 @@ block:
   for key, value in first{"teams"}:
     discard value
     teamKeys.add(key)
-  teamKeys.sort(cmp)
+  sort(teamKeys)
   check(teamKeys == @["blue", "red"],
     "`teams` keys are exactly red and blue — the two names chrome_common's " &
     "TEAM_COLOR / TEAM_ORDER already know, which is what gets the plates, " &
@@ -247,9 +247,9 @@ block:
   var kindList: seq[string]
   for kind in kinds:
     kindList.add(kind)
-  kindList.sort(cmp)
+  sort(kindList)
   var allowed = @BeatKinds
-  allowed.sort(cmp)
+  sort(allowed)
   for kind in kindList:
     check(kind in allowed, "beat kind '" & kind & "' has a CSS rule")
   check("over" in kinds, "the final tick is always marked")

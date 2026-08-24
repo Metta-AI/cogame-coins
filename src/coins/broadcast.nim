@@ -26,8 +26,9 @@ proc teamStateJson(player: ReplayPlayer, slot: int,
     frame: Frame): JsonNode =
   let indices = player.data.indices
   %*{
-    "lives": frame.sc[slot],          ## the score, in the key the chrome's
-                                      ## momentum/plate machinery already reads
+    # "lives" is the SCORE: chrome_common's plate + momentum machinery reads
+    # that key and Coins is copied byte-for-byte into it.
+    "lives": frame.sc[slot],
     "score": frame.sc[slot],
     "thefts": frame.th[slot],
     "pickups": (if indices != nil: indices{"pickups"}[slot].getInt() else: 0),
@@ -127,9 +128,9 @@ proc buildStateJson*(player: ReplayPlayer, events: JsonNode,
     "teams": teams,
     "roster": rosterJson(player, frame),
     "events": (if events.isNil: newJArray() else: events),
-    ## The Coins game key. Everything the appended game block draws — the
-    ## reciprocity strip, the theft headline, the beat timeline — comes from
-    ## here and from nowhere else.
+    # The Coins game key. Everything the appended game block draws — the
+    # reciprocity strip, the theft headline, the beat timeline — comes from
+    # here and from nowhere else.
     "cn": %*{
       "beat": player.beatOfTick(player.tick),
       "beats": player.data.beats,
@@ -165,7 +166,7 @@ proc chromeKeySet*(chrome: string): seq[string] =
   for key, value in node:
     discard value
     result.add(key)
-  result.sort(cmp)
+  sort(result)
 
 # ---------------------------------------------------------------------------
 # the live spectator frame

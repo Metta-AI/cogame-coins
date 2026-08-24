@@ -26,7 +26,8 @@ import bitworld/spriteprotocol
 import curly
 import mummy
 import mummy/routers
-import sim_types, sim, scripted, llm, broadcast, global, replays
+import sim_types, sim, scripted, llm, broadcast, global, replays,
+  wire_constants
 
 const
   PlayerProtocol = "coins.player.v1"
@@ -297,6 +298,18 @@ proc healthzHandler(request: Request) {.gcsafe.} =
 
 const PlayerPage = staticRead("../../client/player.html")
 
+## The broadcast client, EMBEDDED with staticRead and spliced at COMPILE
+## TIME over its three markers — exactly what paintbot's server does. The
+## certifier probes `GET /client/global` BEFORE the player pods start (the
+## lantern learning), and a page assembled from disk at request time is one
+## missing working directory away from a 404 there.
+const GlobalPage = staticRead("../../client/replay_broadcast.html")
+  .replace(WireConstantsMarker, "<script>" & WireConstantsJs & "</script>")
+  .replace("<!-- CHROME_COMMON -->",
+    "<script>" & staticRead("../../client/chrome_common.js") & "</script>")
+  .replace("<!-- BROADCAST_CORE -->",
+    "<script>" & staticRead("../../client/broadcast_core.js") & "</script>")
+
 proc playerPageHandler(request: Request) {.gcsafe.} =
   ## The seat's HTML shell. It NEVER opens the player websocket — the
   ## certifier fetches this before the player pods start.
@@ -305,9 +318,9 @@ proc playerPageHandler(request: Request) {.gcsafe.} =
   request.respond(200, headers, PlayerPage)
 
 proc globalPageHandler(request: Request) {.gcsafe.} =
-  {.gcsafe.}:
-    serveFile(request, clientDir() / "replay_broadcast.html",
-      "text/html; charset=utf-8")
+  var headers: HttpHeaders
+  headers["Content-Type"] = "text/html; charset=utf-8"
+  request.respond(200, headers, GlobalPage)
 
 proc clientAssetHandler(request: Request) {.gcsafe.} =
   {.gcsafe.}:

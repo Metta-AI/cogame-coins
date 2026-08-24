@@ -15,7 +15,7 @@
 ##       and one truce in the greedy-vs-reciprocator sweep.
 ##   (f) the score identity holds at EVERY tick.
 
-import std/[json, strutils]
+import std/json
 import coins/[sim_types, sim, scripted]
 
 var failures = 0
