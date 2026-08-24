@@ -1,0 +1,15 @@
+version     = "0.1.0"
+author      = "daveey"
+description = "Coins: two cogs, one small room, and every coin a choice — a spatial repeated Prisoner's Dilemma ported from Melting Pot."
+license     = "MIT"
+
+srcDir = "src"
+
+requires "nim >= 2.2.4"
+requires "bitworld >= 0.1.0"
+requires "pixie"
+requires "mummy >= 0.4.7"
+requires "curly >= 1.1.1"
+requires "whisky"
+requires "supersnappy >= 2.1.3"
+requires "flatty >= 0.3.4"

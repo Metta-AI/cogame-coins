@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>coins — seat</title>
+<style>
+  body { margin: 0; background: #16110d; color: #f2e8d8;
+         font: 15px/1.55 ui-monospace, Menlo, Consolas, monospace; }
+  main { max-width: 720px; margin: 0 auto; padding: 48px 24px; }
+  h1 { font-size: 22px; letter-spacing: 0.18em; color: #e0523a; margin: 0 0 4px; }
+  h2 { font-size: 13px; letter-spacing: 0.22em; color: #8a7f72;
+       text-transform: uppercase; margin: 28px 0 6px; font-weight: 400; }
+  code, pre { background: #241a12; color: #e8a33d; border-radius: 3px; }
+  code { padding: 1px 5px; }
+  pre { padding: 12px 14px; overflow-x: auto; white-space: pre-wrap; }
+  a { color: #3f7cc4; }
+</style>
+</head>
+<body>
+<main>
+  <h1>COINS — seat</h1>
+  <p>This seat is <strong>view-only in the browser</strong>. A Coins policy is a
+  prompt: the player container's only job is to deliver it, and every decision
+  is made in the game server, which sends BOTH seats' prompts plus their
+  observations to Claude as one parallel batch per beat.</p>
+
+  <h2>Seat channel</h2>
+  <p>The seat itself is the websocket
+  <code>/player?slot=N&amp;token=T</code> speaking
+  <code>coins.player.v1</code>: one <code>prompt</code> frame on connect (and
+  again after <code>welcome</code>, which guards the slot-registration race),
+  then <code>welcome</code>, one <code>state</code> frame per beat close, and
+  <code>final</code> with the scores. A bad slot or token is a 403 and a second
+  connection on a live slot is a 409.</p>
+  <pre>{"type": "prompt", "prompt": "&lt;your strategy, &lt;= 4000 chars&gt;",
+ "scripted": "", "policy": "coins-truce"}</pre>
+  <p><code>scripted</code> may be <code>honest</code>, <code>greedy</code>,
+  <code>reciprocator</code> or <code>tit-for-tat</code> to register the seat as
+  a built-in baseline instead; the server plays those deterministically with no
+  LLM at all.</p>
+
+  <h2>Replying</h2>
+  <p>The game asks the model for exactly one JSON object per beat:</p>
+  <pre>{"intent": "take_mine", "say": "your coins are yours",
+ "notes": "Cobalt stole 2 in beat 5; watching now"}</pre>
+  <p><code>intent</code> is one of <code>take_mine</code>,
+  <code>take_any</code>, <code>take_theirs</code>, <code>guard</code>,
+  <code>hold</code>. <code>say</code> is capped at 48 characters and is
+  <em>spectator-only</em> — the other cog never reads it. <code>notes</code> is
+  capped at 300 characters and comes back to you, and only you, next beat.
+  Both caps are counted in runes, not bytes.</p>
+
+  <h2>Watching</h2>
+  <p>The room renders at <a href="/client/global">/client/global</a> off the
+  same page the hosted static replay bundle serves; live spectator frames are
+  the <code>/global</code> websocket.</p>
+</main>
+</body>
+</html>

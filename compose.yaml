@@ -1,0 +1,17 @@
+# One service, one image: the game binary and the player binary ship together
+# so a policy is env-switched (`PLAYER_PROMPT` vs `PLAYER_SCRIPTED`) rather
+# than re-built.
+#
+# The service NAME is the single source of the manifest image placeholder:
+# `services.coins` -> `{{COINS_IMAGE}}`. `coworld build` derives the
+# placeholder from the compose service name and hard-fails anything else (the
+# lantern learning), and tests/test_manifest.nim asserts the derivation
+# against this file.
+services:
+  coins:
+    image: cogame-coins:latest
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host

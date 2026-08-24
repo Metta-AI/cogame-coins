@@ -1,0 +1,22 @@
+# Nim
+nim.cfg
+nimcache/
+*.exe
+*.out
+*.pdb
+/coins
+/coins-player
+
+# Build output
+replay-viewer/dist/
+dist/
+build/
+tmp/
+
+# Python
+__pycache__/
+*.pyc
+
+# Editors / OS
+.DS_Store
+*.swp

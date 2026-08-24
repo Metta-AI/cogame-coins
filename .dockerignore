@@ -1,0 +1,6 @@
+.git
+replay-viewer/dist
+dist
+nimcache
+nim.cfg
+__pycache__

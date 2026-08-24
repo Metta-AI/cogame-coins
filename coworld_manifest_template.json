@@ -1,0 +1,547 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Metta-AI/coworld/main/src/coworld/coworld_manifest_schema.json",
+  "tags": [
+    "social-dilemma",
+    "melting-pot",
+    "two-player",
+    "grid",
+    "llm-driven",
+    "prisoners-dilemma"
+  ],
+  "episode_timeout_minutes": 20,
+  "game": {
+    "name": "coins",
+    "owner": "daveey@softmax.com",
+    "description": "Coins is a real-time 7x7 grid room shared by exactly two cogs. Coins of two colours spawn at random and each cog owns a colour. Picking up any coin is +1 to you; picking up the other cog's colour is additionally -2 to them. The episode has a random end after beat 12, so restraint can be rational \u2014 and taking everything is a mutual-harm trap.",
+    "runnable": {
+      "type": "game",
+      "image": "{{COINS_IMAGE}}",
+      "run": [
+        "/bin/coins"
+      ],
+      "env": {
+        "ANTHROPIC_API_KEY_URI": "secret://coworld/coins/anthropic_api_key"
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-coins/tree/main"
+    },
+    "replay_viewer": {
+      "bundle": "static-replay-viewer"
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tokens",
+        "players"
+      ],
+      "properties": {
+        "tokens": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "One seat token per agent."
+        },
+        "players": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "One entry per seat, in slot order."
+        },
+        "num_agents": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 2,
+          "default": 2,
+          "description": "Always 2. Coins is a dyad in every variant."
+        },
+        "seed": {
+          "type": "integer",
+          "description": "Pins every RNG stream."
+        },
+        "variant": {
+          "type": "string",
+          "description": "The variant id, recorded in the replay."
+        },
+        "ticksPerBeat": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 60,
+          "default": 20
+        },
+        "minBeats": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24,
+          "default": 12
+        },
+        "maxBeats": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24,
+          "default": 24
+        },
+        "endChancePermille": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000,
+          "default": 120
+        },
+        "coinCap": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 24,
+          "default": 8
+        },
+        "coinSpawnIntervalTicks": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 60,
+          "default": 12
+        },
+        "initialCoins": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 24,
+          "default": 6
+        },
+        "pickupReward": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "default": 1
+        },
+        "theftPenalty": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 2
+        },
+        "stepCooldownTicks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 3
+        },
+        "punishThreshold": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 2
+        },
+        "punishBeats": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 4
+        },
+        "truceBeats": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 3
+        },
+        "llmTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60,
+          "default": 12
+        },
+        "minBeatSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60,
+          "default": 5
+        },
+        "maxOutputTokens": {
+          "type": "integer",
+          "minimum": 64,
+          "maximum": 4096,
+          "default": 500
+        },
+        "model": {
+          "type": "string",
+          "default": "claude-haiku-4-5"
+        },
+        "episodeTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 3600,
+          "default": 1200
+        },
+        "playerConnectTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 600,
+          "default": 180
+        },
+        "shutdownGraceSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 120,
+          "default": 20
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema"
+    },
+    "results_schema": {
+      "type": "object",
+      "required": [
+        "names",
+        "scores",
+        "win",
+        "reason"
+      ],
+      "properties": {
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "scores": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "win": {
+          "type": "array",
+          "items": {
+            "type": "boolean"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "colours": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "pickups": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "thefts": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "stolenFrom": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "restraint": {
+          "type": "array",
+          "items": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "firstTheftBeat": {
+          "type": "array",
+          "items": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "reciprocityLagBeats": {
+          "type": "array",
+          "items": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "beats": {
+          "type": "integer"
+        },
+        "endBeat": {
+          "type": "integer"
+        },
+        "ticks": {
+          "type": "integer"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "random_end",
+            "beat_cap",
+            "deadline",
+            "forfeit"
+          ]
+        }
+      }
+    },
+    "docs": {
+      "readme": {
+        "type": "text",
+        "value": "Coins is a two-seat social dilemma played in real time on a 7x7 open floor. Coins of two colours spawn at random; Copper owns copper, Cobalt owns cobalt. Picking up ANY coin is +1 to whoever takes it, and picking up the OTHER cog's colour additionally costs that cog 2 \u2014 the thief keeps its +1, so a theft is worth +1 to you and -2 to them, a net -1 to the pair. The room is deliberately coin-starved, so supply rather than walking speed is the binding constraint and taking the other cog's coin is a real gain rather than a redistribution. The episode ends at random after beat 12 and always by beat 24, which is the whole point: the shadow of the future is what makes restraint rational when greed is the dominant one-shot move. A seat submits ONE intent per 20-tick beat \u2014 take_mine, take_any, take_theirs, guard or hold \u2014 and a deterministic kernel walks the cog for the rest of the beat. Restraint is enforced as a movement rule, not a pickup rule, so a cog that refuses a colour visibly walks AROUND those coins. There is no channel between the seats: trust has to be shown, never promised. Higher score wins."
+      },
+      "pages": [
+        {
+          "id": "rules.md",
+          "title": "Rules",
+          "content": {
+            "type": "text",
+            "value": "THE ROOM. One fixed 9x9 arena with a one-cell wall ring: 7x7 = 49 walkable interior cells, fully open. Moves are 4-way (north, east, south, west); distance is Manhattan. Every sim quantity is an integer, so one seed reproduces one episode bit-exactly.\n\nCLOCK. 24 ticks per second of replay video; a beat is 20 ticks. minBeats 12, maxBeats 24, endChancePermille 120 in the default variant, so an episode runs 240 to 480 ticks. At the close of every beat b with minBeats <= b < maxBeats a dedicated RNG stream draws once and ends the episode with probability endChancePermille/1000; beat maxBeats always ends it. When minBeats == maxBeats the draw is skipped entirely (that is how the certification fixture is deterministic). The drawn end beat is HIDDEN from both seats; each seat is told the distribution, never the realisation.\n\nCOINS. Six coins are placed at tick 0, half copper and half cobalt, on interior cells that hold no coin and no cog. At every tick t with t mod coinSpawnIntervalTicks == 0 and t > 0, if fewer than coinCap coins are on the board, ONE coin spawns: colour by a fair 50/50 draw, cell drawn uniformly from the interior cells that hold no coin and no cog.\n\nSCORING. When seat i picks up a coin of colour c: score[i] += pickupReward (=1), always. If c is not seat i's own colour, score[1-i] -= theftPenalty (=2) as well; the thief keeps its +1. Nothing else changes a score. Scores are whole integers and can go negative. The identity score[i] == pickups[i] - theftPenalty * stolenFrom[i] holds at every tick.\n\nTHE EIGHT NUMBERED TICK RULES. (1) Timers: stepCd decrements toward 0. (2) Intent evaluation: each cog's current intent produces a target cell and a forbidden-colour set, and from the target the ordered list of reducing directions among N, E, S, W. (3) Movement, both cogs resolved simultaneously: (a) a candidate cell is legal iff it is interior floor, is not the cell the other cog occupied at the START of the tick (there is no follow-through), and does not hold a coin of a forbidden colour; (b) the desired step is the first legal reducing direction, else the first legal cell among all of N, E, S, W (a sidestep, which is what stops a restrained cog deadlocking behind a coin it will not take); (c) if each cog wants the other's starting cell, both wait; (d) if both want the SAME cell, one flip from the move RNG names the winner, the loser waits and is NOT charged its cooldown \u2014 this is how a simultaneous pickup conflict is settled, so two cogs can never take one coin; (e) commit, facing follows the direction moved, stepCd = stepCooldownTicks. A blocked cog emits one `blocked` event with why in {restraint, contested, occupied}. (4) Pickup: any cog standing on a coin collects it. (5) Scoring, per the formula above. (6) Spawn. (7) Counters and the leader. (8) Record the tick's state frame and events.\n\nTHE FIVE INTENTS. take_mine walks to the nearest coin of YOUR colour and forbids the other colour. take_any walks to the nearest coin of any colour (ties: own colour first, then lowest y, then lowest x) and forbids nothing; with no coin on the board it walks to the room centre and waits. take_theirs walks to the nearest coin of the OTHER colour, forbids nothing, and falls back to take_mine's target when there is none. guard walks to the coin of your own colour that is nearest to the OTHER cog and forbids the other colour. hold stands still and forbids the other colour.\n\nTHE TRUCE BEAT. At the close of beat b a `truce` event is emitted for a seat iff it has stolen at some point, its theft counter has not increased for truceBeats consecutive beats, and no truce has been emitted for it since its most recent theft. Every later theft re-arms it.\n\nEND CONDITIONS. random_end (the draw fired), beat_cap (maxBeats closed), deadline (the wall clock passed 60% of episodeTimeoutSeconds, checked at beat closes only) or forfeit (NEITHER seat connected). Those four are the only legal reasons. If ONE seat never connects or disconnects mid-episode, the episode plays to a normal end with that cog driven by the reciprocator baseline."
+          }
+        },
+        {
+          "id": "policies.md",
+          "title": "Fielding a policy",
+          "content": {
+            "type": "text",
+            "value": "A POLICY IS A PROMPT. Both policy kinds ship in the same image, env-switched:\n\n  coworld upload-policy <coins-image> --name my-coins \\\n    --run /bin/coins-player \\\n    --secret-env PLAYER_PROMPT=\"<your strategy>\" \\\n    --secret-env USE_BEDROCK=true\n\nSet PLAYER_SCRIPTED=honest|greedy|reciprocator|tit-for-tat instead to register the seat as a built-in baseline; the game plays those deterministically with no LLM at all. USE_BEDROCK=true is required on a prompt policy or the platform gives the player pod no Bedrock sidecar.\n\nDECISIONS ARE MADE IN THE GAME CONTAINER. /bin/coins-player connects, sends {\"type\":\"prompt\",\"prompt\":...,\"scripted\":...} once on connect and again after `welcome`, and then only listens. The game composes each seat's observation plus that seat's prompt and issues BOTH seats' requests as ONE parallel batch per beat.\n\nTHE OBSERVATION. At every beat close each seat receives a `state` frame of the coins.player.v1 protocol carrying: its slot, alias and owned colour; the beat number, minBeats, maxBeats and endChancePermille; the room; the full rule set and every constant; its own x/y/facing/score/pickups/thefts/stolenFrom; the OTHER cog's alias, colour, position, score, pickups, thefts and stolenFrom (the theft counter is public \u2014 a dilemma you cannot see you were robbed in is not a dilemma); every coin on the board with its colour; the complete per-beat history so far (each beat's pickups and thefts for both cogs and the running score, with YOUR OWN intent per beat but not theirs); and your own notes from last beat. Hidden: the other cog's intent for the coming beat, its say and notes, its policy name and account, every RNG stream, the drawn end beat, and anything about the league.\n\nTHE REPLY SCHEMA. Exactly one JSON object whose first character is {:\n\n  {\"intent\":\"take_mine\",\"say\":\"your coins are yours\",\"notes\":\"...\"}\n\n  intent  required, one of take_mine, take_any, take_theirs, guard, hold\n          (case-insensitive). Absent or outside the set = an invalid reply.\n  say     optional, capped at 48 RUNES, truncated on a rune boundary.\n          SPECTATOR-ONLY: it is written to the replay and drawn in the feed,\n          and the other seat NEVER reads it. There is no inter-seat channel.\n  notes   optional, capped at 300 RUNES, truncated on a rune boundary.\n          Returned to the same seat, and only that seat, next beat.\n\nExtra keys are ignored and trailing prose after the closing brace is tolerated. An invalid reply is retried once in the same beat with a hint; still failing, that seat plays the scripted reciprocator move for that beat and the `order` event records source: \"fallback\"."
+          }
+        }
+      ]
+    },
+    "protocols": {
+      "player": {
+        "type": "text",
+        "value": "coins.player.v1, JSON text frames over WS /player?slot=N&token=T. A bad slot or token is refused with 403 (409 on a duplicate live slot), never left hanging.\n\ngame -> player:\n  {\"type\":\"welcome\",\"protocol\":\"coins.player.v1\",\"slot\":0,\"alias\":\"Copper\",\"colour\":\"copper\",\"opponent\":\"Cobalt\",\"ticksPerBeat\":20,\"minBeats\":12,\"maxBeats\":24}  on connect\n  {\"type\":\"state\",...}  at every beat close and once at episode end (the observation: slot, alias, colour, beat, minBeats, maxBeats, endChancePermille, ticksPerBeat, tick, room, rules, you{x,y,facing,score,pickups,thefts,stolenFrom}, them{alias,colour,x,y,score,pickups,thefts,stolenFrom}, coins[{x,y,colour}], beatLog[], notes)\n  {\"type\":\"final\",\"done\":true,\"slot\":0,\"scores\":[11.0,4.0],\"names\":[\"Copper\",\"Cobalt\"],\"beats\":18,\"reason\":\"random_end\"}  after which the player exits 0\n\nplayer -> game:\n  {\"type\":\"prompt\",\"prompt\":\"<= 4000 chars\",\"scripted\":\"honest|greedy|reciprocator|tit-for-tat|\",\"policy\":\"<label>\"}  sent immediately on connect AND again after welcome (the re-send guards the slot-registration race). Any other frame is ignored with a log line.\n\nThe reply the GAME asks the model for is one JSON object: {\"intent\": one of take_mine|take_any|take_theirs|guard|hold, \"say\": <= 48 runes, spectator-only, \"notes\": <= 300 runes, private to that seat}. Both text caps are counted in RUNES and truncated on rune boundaries."
+      },
+      "global": {
+        "type": "text",
+        "value": "WS /global is the live spectator channel: paintbot's binary sprite protocol for the board (layer + viewport + sprite definitions + retained-mode object placements over a 504x504 zoomable map layer) with the broadcast chrome smuggled as the LABEL of the reserved 1x1 sprite id 4090, which client/broadcast_core.js routes to onText and never draws. The chrome frame carries t, mt, ph, pl, sp, mx, st, lp, sk, ff, en, mm, bs, pov, teams, roster, events, lead, beats, lulls, over, hold \u2014 the key set client/chrome_common.js consumes unmodified \u2014 plus one game key, cn, holding the beat, the reciprocity rows, the truce beats, the coins on the board, the theft counters and the index summary.\n\nGET /client/global serves the same page the static bundle serves. GET /healthz answers 200 from process start until shutdownGraceSeconds after the artifacts are written, and /global keeps answering (including WebSocket Ping with Pong) for that same grace, because hosted certification pings it AFTER the player pods start.\n\nReplays are a STATIC file plus a browser wasm viewer, never a pod: the bundle is index.html?replay=<url of the .replay file>. The viewer re-derives every frame from the replay bytes alone (aliases, policy names, colours, the variant, the whole config, the seed, the room, per-tick state frames, both series, the index summary, every event and the full results object are all in the file); no server is contacted except S3 for the replay."
+      }
+    }
+  },
+  "player": [
+    {
+      "id": "coins-player",
+      "type": "player",
+      "name": "coins-player",
+      "description": "A prompt policy. PLAYER_PROMPT is supplied at upload time; with none it plays a restrained default.",
+      "image": "{{COINS_IMAGE}}",
+      "run": [
+        "/bin/coins-player"
+      ]
+    },
+    {
+      "id": "coins-reciprocator",
+      "type": "player",
+      "name": "coins-reciprocator",
+      "description": "The scripted reciprocating bot: honest until the other cog has stolen 2 coins, then take_theirs for 4 beats, then honest again with the trigger re-armed.",
+      "image": "{{COINS_IMAGE}}",
+      "run": [
+        "/bin/coins-player"
+      ],
+      "env": {
+        "PLAYER_SCRIPTED": "reciprocator"
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "standard",
+      "default": true,
+      "description": "The base dilemma: a coin-starved room, a random end after beat 12.",
+      "game_config": {
+        "players": [
+          {
+            "name": "Copper"
+          },
+          {
+            "name": "Cobalt"
+          }
+        ],
+        "num_agents": 2,
+        "variant": "standard",
+        "ticksPerBeat": 20,
+        "stepCooldownTicks": 3,
+        "seed": 679961,
+        "minBeats": 12,
+        "maxBeats": 24,
+        "endChancePermille": 120,
+        "coinCap": 8,
+        "coinSpawnIntervalTicks": 12,
+        "initialCoins": 6,
+        "theftPenalty": 2
+      }
+    },
+    {
+      "id": "long-shadow",
+      "description": "A long shadow of the future - restraint is much easier to sustain.",
+      "game_config": {
+        "players": [
+          {
+            "name": "Copper"
+          },
+          {
+            "name": "Cobalt"
+          }
+        ],
+        "num_agents": 2,
+        "variant": "long-shadow",
+        "ticksPerBeat": 20,
+        "stepCooldownTicks": 3,
+        "seed": 679961,
+        "minBeats": 18,
+        "maxBeats": 24,
+        "endChancePermille": 60,
+        "coinCap": 8,
+        "coinSpawnIntervalTicks": 12,
+        "initialCoins": 6,
+        "theftPenalty": 2
+      }
+    },
+    {
+      "id": "short-fuse",
+      "description": "The end comes early and often: endgame grabs are rational sooner.",
+      "game_config": {
+        "players": [
+          {
+            "name": "Copper"
+          },
+          {
+            "name": "Cobalt"
+          }
+        ],
+        "num_agents": 2,
+        "variant": "short-fuse",
+        "ticksPerBeat": 20,
+        "stepCooldownTicks": 3,
+        "seed": 679961,
+        "minBeats": 6,
+        "maxBeats": 14,
+        "endChancePermille": 250,
+        "coinCap": 8,
+        "coinSpawnIntervalTicks": 12,
+        "initialCoins": 6,
+        "theftPenalty": 2
+      }
+    },
+    {
+      "id": "harsh",
+      "description": "Every theft costs the victim 3, so the mutual-harm trap is deeper.",
+      "game_config": {
+        "players": [
+          {
+            "name": "Copper"
+          },
+          {
+            "name": "Cobalt"
+          }
+        ],
+        "num_agents": 2,
+        "variant": "harsh",
+        "ticksPerBeat": 20,
+        "stepCooldownTicks": 3,
+        "seed": 679961,
+        "minBeats": 12,
+        "maxBeats": 24,
+        "endChancePermille": 120,
+        "coinCap": 8,
+        "coinSpawnIntervalTicks": 12,
+        "initialCoins": 6,
+        "theftPenalty": 3
+      }
+    },
+    {
+      "id": "scarce",
+      "description": "Barely any coins: every single spawn is a decision both cogs are watching.",
+      "game_config": {
+        "players": [
+          {
+            "name": "Copper"
+          },
+          {
+            "name": "Cobalt"
+          }
+        ],
+        "num_agents": 2,
+        "variant": "scarce",
+        "ticksPerBeat": 20,
+        "stepCooldownTicks": 3,
+        "seed": 679961,
+        "minBeats": 12,
+        "maxBeats": 24,
+        "endChancePermille": 120,
+        "coinCap": 4,
+        "coinSpawnIntervalTicks": 20,
+        "initialCoins": 3,
+        "theftPenalty": 2
+      }
+    }
+  ],
+  "certification": {
+    "game_config": {
+      "num_agents": 2,
+      "seed": 7,
+      "variant": "standard",
+      "minBeats": 16,
+      "maxBeats": 16,
+      "ticksPerBeat": 20,
+      "coinCap": 8,
+      "coinSpawnIntervalTicks": 12,
+      "initialCoins": 6,
+      "playerConnectTimeoutSeconds": 180,
+      "players": [
+        {
+          "name": "Copper"
+        },
+        {
+          "name": "Cobalt"
+        }
+      ]
+    },
+    "players": [
+      {
+        "player_id": "coins-player"
+      },
+      {
+        "player_id": "coins-reciprocator"
+      }
+    ]
+  }
+}

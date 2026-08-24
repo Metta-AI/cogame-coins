@@ -1,0 +1,33 @@
+[
+  {
+    "name": "coins-truce",
+    "run": "/bin/coins-player",
+    "env": {
+      "PLAYER_PROMPT": "Open restrained: take only your own colour and let the other cog's coins sit, even when one is closer than yours. You are trying to establish a truce worth more to both of you than a scramble, and the only way you can say so is by walking past their coins where they can see you do it. Watch their theft counter every beat, not their words. If it does not move, keep taking only yours with take_mine. If it moves by one, hold your line for one more beat - a single theft can be a coin they stumbled onto. If it moves twice, switch to take_theirs for exactly two beats so the cost is unmistakable, then go straight back to take_mine and give them a clean beat to reciprocate. Never punish for longer than they stole; never punish twice for the same theft. When two of your coins are on the board and they are closer to one than you are, play guard for that beat. Late in the episode, when the end could come at any beat, keep the truce anyway - a last-minute grab wins you one coin and costs you the two beats you spend being robbed back.",
+      "USE_BEDROCK": "true"
+    }
+  },
+  {
+    "name": "coins-ledger",
+    "run": "/bin/coins-player",
+    "env": {
+      "PLAYER_PROMPT": "Keep a ledger and play the balance. Every beat, compute what each of you has taken from the other and what the score gap is. Your score is pickups minus twice their thefts, so their thefts hurt you exactly twice as much as your own pickups help - a cog that steals from you is the single biggest term in your score, and matching them is cheaper than absorbing them. Default to take_mine. The moment their thefts exceed yours by two, play take_theirs until the ledger is level again, then stop the same beat it levels. When two of your coins are on the board and they are closer to one than you are, play guard and bank the one they can reach first - a coin you already hold cannot be taken. If the board is empty of your colour and full of theirs, hold rather than take_any: an unforced theft restarts a war you were winning quietly. Write the running ledger into your notes every beat so the next beat starts from numbers, not from memory.",
+      "USE_BEDROCK": "true"
+    },
+    "player": "ply_bac48eb1-662e-44f8-973d-f3e016dccf5d"
+  },
+  {
+    "name": "coins-reciprocator",
+    "run": "/bin/coins-player",
+    "env": {
+      "PLAYER_SCRIPTED": "reciprocator"
+    }
+  },
+  {
+    "name": "coins-titfortat",
+    "run": "/bin/coins-player",
+    "env": {
+      "PLAYER_SCRIPTED": "tit-for-tat"
+    }
+  }
+]

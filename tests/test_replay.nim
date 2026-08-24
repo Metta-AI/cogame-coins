@@ -1,0 +1,201 @@
+## tests/test_replay.nim — end-to-end plus a STRICT UTF-8 parse.
+##
+## Plays a full scripted episode headless, writes `results.json` and the
+## replay, then re-reads the replay BYTES: `validateUtf8 == -1` (strict),
+## parses as JSON, and every structural invariant the viewer depends on.
+##
+## A seat is then fed a `say`/`notes` of multi-byte runes exactly at the
+## 48 / 300 caps and the recorded strings are asserted valid UTF-8 and <= the
+## cap in RUNES — the bullwhip byte-truncation bug, which put invalid UTF-8
+## into a replay and was only ever found by a strict parser.
+
+import std/[json, os, strutils, unicode]
+import coins/[sim_types, sim, scripted, replays]
+
+var failures = 0
+
+proc check(condition: bool, what: string) =
+  if not condition:
+    echo "FAIL: ", what
+    failures.inc
+
+proc certConfig(seed: int): GameConfig =
+  result = defaultGameConfig()
+  result.seed = seed
+  result.minBeats = 16
+  result.maxBeats = 16
+  result.tokens = @["t0", "t1"]
+  result.players = @[PlayerConfig(name: "Copper"), PlayerConfig(name: "Cobalt")]
+
+# ---------------------------------------------------------------------------
+echo "--- rune truncation, at the cap and past it"
+block:
+  ## Two-rune-wide characters: a byte cut lands mid-sequence and produces
+  ## invalid UTF-8; a rune cut cannot.
+  let wide = "\u00e9"                 ## e-acute: 2 bytes, 1 rune
+  let sayAtCap = wide.repeat(MaxSayLen)
+  let notesAtCap = wide.repeat(MaxNotesLen)
+  check(sayAtCap.runeLen == MaxSayLen, "the fixture say is exactly at the cap")
+  check(cleanSay(sayAtCap) == sayAtCap, "text at the cap is untouched")
+  check(cleanNotes(notesAtCap) == notesAtCap, "notes at the cap are untouched")
+  let sayOver = wide.repeat(MaxSayLen + 40)
+  let notesOver = wide.repeat(MaxNotesLen + 90)
+  check(cleanSay(sayOver).runeLen <= MaxSayLen,
+    "an over-cap say is cut to the cap IN RUNES")
+  check(cleanNotes(notesOver).runeLen <= MaxNotesLen,
+    "an over-cap notes is cut to the cap IN RUNES")
+  check(validateUtf8(cleanSay(sayOver)) == -1,
+    "the truncated say is still valid UTF-8")
+  check(validateUtf8(cleanNotes(notesOver)) == -1,
+    "the truncated notes is still valid UTF-8")
+  check(cleanSay("a\nb") == "a b", "newlines in say become spaces")
+
+# ---------------------------------------------------------------------------
+echo "--- a full episode, written and re-read"
+let wide = "\u4e2d"                   ## 3 bytes, 1 rune
+let sayFixture = wide.repeat(MaxSayLen + 12)
+let notesFixture = wide.repeat(MaxNotesLen + 25)
+
+var sim = initSim(certConfig(7))
+block:
+  proc now(): float {.closure.} = 0.0
+  proc decide(view: Sim, seats: seq[int]): seq[Decision] {.closure.} =
+    let kinds = [skGreedy, skReciprocator]
+    for slot in seats:
+      result.add(Decision(
+        intent: scriptedIntent(kinds[slot], view.buildObservation(slot),
+          view.config.punishThreshold, view.config.punishBeats),
+        source: (if slot == 0: osLlm else: osScripted),
+        ## Both free-text fields arrive already rune-truncated, exactly as
+        ## `parseDecision` produces them.
+        say: cleanSay(sayFixture),
+        notes: cleanNotes(notesFixture)))
+  sim.policyNames = ["coins-truce", "coins-reciprocator"]
+  sim.runEpisode(decide, now)
+
+let bytes = replayBytes(sim)
+let resultsBytes = $sim.resultsJson()
+let dir = getTempDir() / "coins-test-replay"
+createDir(dir)
+writeFile(dir / "replay.json", bytes)
+writeFile(dir / "results.json", resultsBytes)
+let readBack = readFile(dir / "replay.json")
+removeDir(dir)
+
+check(validateUtf8(readBack) == -1,
+  "the replay bytes are STRICT valid UTF-8 (validateUtf8 == -1)")
+check(readBack.len < 4 * 1024 * 1024,
+  "the replay is under 4 MiB, got " & $readBack.len & " bytes")
+echo "replay size: ", readBack.len, " bytes"
+
+let node = parseJson(readBack)
+check(node{"protocol"}.getStr() == "coins.replay.v1", "protocol")
+check(node{"game"}.getStr() == "coins", "game name")
+check(node.hasKey("seed") and node{"seed"}.getInt() == 7, "the seed is pinned")
+check(node.hasKey("config"), "the whole config is pinned")
+check(node{"config"}{"ticksPerBeat"}.getInt() == 20, "config carries the beat")
+check(node{"room"}{"walls"}.len == 9, "room.walls is present, 9 rows")
+check(node{"names"}.len == 2 and node{"policyNames"}.len == 2,
+  "names.len == policyNames.len == 2")
+check(node{"policyNames"}[0].getStr() == "coins-truce",
+  "the replay carries POLICY names alongside the aliases")
+check(node{"names"}[0].getStr() == "Copper", "and the anonymous aliases")
+
+let ticksPlayed = node{"ticksPlayed"}.getInt()
+check(ticksPlayed == 16 * 20, "320 ticks at the cert fixture")
+check(node{"frames"}.len == ticksPlayed,
+  "frames.len == ticksPlayed: " & $node{"frames"}.len)
+check(node{"series"}{"score"}.len == ticksPlayed,
+  "series.score.len == ticksPlayed")
+check(node{"series"}{"beatThefts"}.len == node{"beats"}.getInt(),
+  "series.beatThefts.len == beats")
+
+var kinds: seq[string]
+var beatCloses = 0
+var ends = 0
+var spawns = 0
+var pickups = 0
+var thefts = 0
+var orders = 0
+var recordedSay = ""
+var recordedNotes = ""
+for record in node{"events"}:
+  let kind = record{"k"}.getStr()
+  if kind notin kinds: kinds.add(kind)
+  let t = record{"t"}.getInt()
+  check(t >= 0 and t <= ticksPlayed,
+    "every event tick is inside 0..ticksPlayed, got " & $t)
+  case kind
+  of "beatclose": beatCloses.inc
+  of "end": ends.inc
+  of "spawn": spawns.inc
+  of "pickup": pickups.inc
+  of "theft": thefts.inc
+  of "order":
+    orders.inc
+    recordedSay = record{"say"}.getStr()
+    recordedNotes = record{"notes"}.getStr()
+  else: discard
+
+check(spawns >= 1, "at least one spawn")
+check(pickups >= 1, "at least one pickup")
+check(thefts >= 1, "at least one theft")
+check(orders == node{"beats"}.getInt() * 2,
+  "one order per seat per beat: " & $orders)
+check(beatCloses == node{"beats"}.getInt(),
+  "exactly `beats` beatclose events: " & $beatCloses)
+check(ends == 1, "exactly one end event")
+for kind in kinds:
+  check(kind in ["order", "spawn", "pickup", "theft", "blocked", "truce",
+    "leadchange", "beatclose", "end"],
+    "the event vocabulary is closed, saw " & kind)
+
+check(validateUtf8(recordedSay) == -1, "the recorded say is valid UTF-8")
+check(validateUtf8(recordedNotes) == -1, "the recorded notes is valid UTF-8")
+check(recordedSay.runeLen <= MaxSayLen,
+  "the recorded say is <= " & $MaxSayLen & " RUNES, got " &
+  $recordedSay.runeLen)
+check(recordedNotes.runeLen <= MaxNotesLen,
+  "the recorded notes is <= " & $MaxNotesLen & " RUNES, got " &
+  $recordedNotes.runeLen)
+
+let results = node{"results"}
+check(results{"scores"}.len == 2, "results.scores.len == 2")
+check(results{"names"}.len == 2, "results.names.len == 2")
+check(results{"reason"}.getStr() in
+  ["random_end", "beat_cap", "deadline", "forfeit"],
+  "results.reason is one of the four legal values, got " &
+  results{"reason"}.getStr())
+check(results{"reason"}.getStr() == "beat_cap",
+  "minBeats == maxBeats ends with beat_cap")
+check(results{"win"}.len == 2, "results.win.len == 2")
+check(results{"restraint"}.len == 2, "results.restraint.len == 2")
+
+check($parseJson(resultsBytes) == $sim.resultsJson(),
+  "results.json round-trips")
+
+# ---------------------------------------------------------------------------
+echo "--- the replay parses back into a playable playhead"
+block:
+  let data = parseReplayBytes(readBack)
+  check(data.frames.len == ticksPlayed, "the parser recovers every frame")
+  check(data.config.ticksPerBeat == 20, "and the config")
+  var player = initReplayPlayer(data)
+  check(player.maxTick() == ticksPlayed - 1, "maxTick")
+  player.seek(player.maxTick())
+  check(player.tick == ticksPlayed - 1, "a seek is an array index")
+  let frame = player.frame()
+  check(frame.sc[0] == sim.cogs[0].score and frame.sc[1] == sim.cogs[1].score,
+    "the last frame carries the final scores")
+  player.seek(0)
+  var advanced = 0
+  for _ in 0 ..< ticksPlayed + 10:
+    let before = player.tick
+    player.advance()
+    if player.tick != before: advanced.inc
+  check(advanced > 0, "playback advances")
+
+if failures > 0:
+  echo failures, " failing checks"
+  quit(1)
+echo "test_replay OK"
