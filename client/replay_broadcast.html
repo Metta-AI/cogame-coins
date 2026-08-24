@@ -1980,6 +1980,19 @@ button.beat-marker:focus-visible { outline: 1px solid var(--amber); }
 }
 
 /* ---- endcard rows ------------------------------------------------------- */
+/* The starter's #ec-teams is a wrapping flex ROW of per-team panels. Coins
+   draws a two-row TABLE into it instead, so the container becomes a block
+   and each row owns the full width. */
+#endcard .ec-teams {
+  display: block;
+  width: 100%;
+  max-width: calc(520 * var(--u));
+  margin: 0 auto;
+  background: rgba(20, 14, 9, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(242, 232, 216, 0.12);
+  padding: calc(8 * var(--u)) calc(12 * var(--u));
+  text-align: left;
+}
 #endcard .cn-erow {
   display: grid;
   grid-template-columns: minmax(0, 2fr) repeat(5, minmax(0, 1fr));
@@ -2007,7 +2020,8 @@ button.beat-marker:focus-visible { outline: 1px solid var(--amber); }
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-#endcard .cn-strip { width: 100%; margin-top: calc(8 * var(--u)); }
+#endcard .cn-erow + .cn-erow { border-top: 1px solid rgba(242, 232, 216, 0.1); }
+#stage.tiny #endcard .ec-teams { max-width: 100%; }
 
 /* ---- 360 px: the featured-match iframe ---------------------------------- */
 /* relayout() toggles #stage.tiny at boardW <= 620 and is kept verbatim; these
@@ -2017,7 +2031,18 @@ button.beat-marker:focus-visible { outline: 1px solid var(--amber); }
 #stage.tiny .plate .cn-restraint { display: none; }
 #stage.tiny #cn-recip .cn-nums { display: none; }
 #stage.tiny #cn-recip .cn-cell { height: calc(4.5 * var(--u)); }
+#stage.tiny #cn-recip { width: calc(120 * var(--u)); }
 #stage.tiny #cn-thefts .cn-t small { display: none; }
+/* the theft headline shortens to `2 ✦ 5` */
+#cn-thefts .cn-short { display: none; }
+#stage.tiny #cn-thefts { gap: calc(5 * var(--u)); }
+#stage.tiny #cn-thefts .cn-long { display: none; }
+#stage.tiny #cn-thefts .cn-short { display: inline; }
+#stage.tiny #cn-thefts .cn-t[data-seat="0"]::after {
+  content: '\2726';
+  color: var(--ghost);
+  margin-left: calc(5 * var(--u));
+}
 @media (max-width: 640px) {
   .plate .cn-stole b { font-weight: 700; }
   .plate .cn-restraint,
@@ -2219,7 +2244,13 @@ button.beat-marker:focus-visible { outline: 1px solid var(--amber); }
       var want = head + '|' + sub;
       if (el._want === want) return;
       el._want = want;
-      el.innerHTML = cnEsc(head) + '<small>' + cnEsc(sub) + '</small>';
+      // Both forms ship; CSS picks one. Under #stage.tiny (the ~360 px
+      // featured-match iframe) the long form is hidden and the headline
+      // reads `2 ✦ 5`.
+      el.innerHTML =
+        '<span class="cn-long">' + cnEsc(head) + '</span>' +
+        '<span class="cn-short">' + cnEsc(String(thefts)) + '</span>' +
+        '<small>' + cnEsc(sub) + '</small>';
     });
   }
 
