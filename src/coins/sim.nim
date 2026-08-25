@@ -436,6 +436,15 @@ proc closeBeat*(sim: var Sim): bool =
 proc endEpisode*(sim: var Sim, reason: EndReason) =
   if sim.finished:
     return
+  ## An episode that ends before its first tick — `forfeit`, where neither
+  ## seat connected — would otherwise write a replay whose `frames` array is
+  ## empty, and `parseReplayBytes` rejects that ("replay carries no frames"),
+  ## so the artifact the platform stores could not be opened. Record the
+  ## opening position as that episode's one frame; `ticksPlayed`,
+  ## `series.score` and `frames` stay in step.
+  if sim.frames.len == 0:
+    sim.recordFrame()
+    sim.tick.inc
   sim.finished = true
   sim.reason = reason
   sim.endBeat = sim.beatsPlayed

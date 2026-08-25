@@ -217,6 +217,34 @@ block:
       break
 
 # ---------------------------------------------------------------------------
+echo "--- an episode that ends before its first tick still writes a LOADABLE replay"
+block:
+  ## `forfeit` — neither seat connected — settles without ever calling
+  ## stepTick. A replay whose `frames` array is empty is rejected by the
+  ## parser ("replay carries no frames"), so the artifact the platform stores
+  ## would set data-replay-error instead of rendering.
+  var stillborn = initSim(certConfig(11))
+  stillborn.endEpisode(erForfeit)
+  let forfeitBytes = replayBytes(stillborn)
+  check(validateUtf8(forfeitBytes) == -1, "the forfeit replay is valid UTF-8")
+  let forfeitData = parseReplayBytes(forfeitBytes)
+  check(forfeitData.frames.len == 1,
+    "it carries the opening position as its one frame")
+  let forfeitNode = parseJson(forfeitBytes)
+  check(forfeitNode{"ticksPlayed"}.getInt() == forfeitData.frames.len,
+    "ticksPlayed and frames stay in step")
+  check(forfeitNode{"series"}{"score"}.len == forfeitData.frames.len,
+    "and so does the score series")
+  check(forfeitNode{"results"}{"reason"}.getStr() == "forfeit",
+    "the reason is still forfeit")
+  check(forfeitData.results{"scores"}[0].getFloat() == 0.0 and
+      forfeitData.results{"scores"}[1].getFloat() == 0.0,
+    "with both scores zero")
+  var forfeitPlayer = initReplayPlayer(forfeitData)
+  check(forfeitPlayer.maxTick() == 0,
+    "the playhead has exactly one tick to show")
+
+# ---------------------------------------------------------------------------
 echo "--- the replay parses back into a playable playhead"
 block:
   let data = parseReplayBytes(readBack)
