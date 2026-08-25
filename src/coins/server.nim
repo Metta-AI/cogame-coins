@@ -423,6 +423,15 @@ proc handleRegister(slot: int, payload: JsonNode) =
     if node == nil or node.kind == JNull: skNone
     elif node.kind == JBool: (if node.getBool(): skReciprocator else: skNone)
     else: parseScriptKind(node.getStr())
+  if node != nil and node.kind == JString and kind == skNone and
+      node.getStr().strip().len > 0:
+    ## A misspelled PLAYER_SCRIPTED is `skNone`, which this server reads as
+    ## "an LLM seat" — the seat then plays the default prompt with real
+    ## credentials, or the reciprocator without them, and nothing in the log
+    ## ever names the typo. Say it once, on the seat's own registration.
+    echo "coins: slot ", slot, " registered scripted=\"", node.getStr(),
+      "\", which is not one of ", ScriptedNames,
+      " — this seat is treated as an LLM seat"
   if prompt.strip().len == 0 and kind == skNone:
     ## Registered with neither field: play the default baseline.
     kind = skReciprocator
