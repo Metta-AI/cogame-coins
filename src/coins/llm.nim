@@ -383,31 +383,45 @@ proc decideAll*(client: LlmClient, view: Sim, seats: seq[int],
     if open.len == 0 or client.disabled:
       break
     let started = epochTime()
-    var batch: RequestBatch
-    for index in open:
-      let seat = seats[index]
-      let obs = view.buildObservation(seat)
-      var user = userPrompt(obs, (if seat < prompts.len: prompts[seat] else: ""))
-      if attempt > 0:
-        user.add(RetryHint)
-      let request = client.requestFor(systemPrompt(obs), user)
-      batch.post(request.url, request.headers, request.body, $index)
-    let responses = client.curl.makeRequests(batch, client.timeoutSeconds)
-    let latency = int((epochTime() - started) * 1000.0)
     var stillOpen: seq[int]
-    for position, index in open:
-      let seat = seats[index]
-      try:
-        let text = client.textOf(responses[position].response,
-          responses[position].error, batch[position].url)
-        var decision = parseDecision(extractJsonObject(text))
-        decision.source = if attempt == 0: osLlm else: osRetry
-        decision.latencyMs = latency
-        result[index] = decision
-      except CatchableError as error:
-        echo "coins llm: seat ", seat, " attempt ", attempt, " failed: ",
-          error.msg
-        stillOpen.add(index)
+    ## The per-seat `try` below covers everything Coins itself can raise
+    ## (transport status, refusal, parse, unknown intent). This outer one
+    ## covers the BATCH: building an observation or a request, and
+    ## `makeRequests` raising rather than returning a per-request `.error`.
+    ## `decideAll` never raises — a raise here would leave `runEpisode` on the
+    ## episode thread, and the container would serve /healthz until the
+    ## platform's own timeout instead of settling.
+    try:
+      var batch: RequestBatch
+      for index in open:
+        let seat = seats[index]
+        let obs = view.buildObservation(seat)
+        var user = userPrompt(obs,
+          (if seat < prompts.len: prompts[seat] else: ""))
+        if attempt > 0:
+          user.add(RetryHint)
+        let request = client.requestFor(systemPrompt(obs), user)
+        batch.post(request.url, request.headers, request.body, $index)
+      let responses = client.curl.makeRequests(batch, client.timeoutSeconds)
+      let latency = int((epochTime() - started) * 1000.0)
+      for position, index in open:
+        let seat = seats[index]
+        try:
+          if position >= responses.len:
+            raise newException(CoinsError, "no response for seat " & $seat)
+          let text = client.textOf(responses[position].response,
+            responses[position].error, batch[position].url)
+          var decision = parseDecision(extractJsonObject(text))
+          decision.source = if attempt == 0: osLlm else: osRetry
+          decision.latencyMs = latency
+          result[index] = decision
+        except CatchableError as error:
+          echo "coins llm: seat ", seat, " attempt ", attempt, " failed: ",
+            error.msg
+          stillOpen.add(index)
+    except CatchableError as error:
+      echo "coins llm: batch attempt ", attempt, " failed: ", error.msg
+      stillOpen = open
     open = stillOpen
   for index in open:
     let seat = seats[index]
