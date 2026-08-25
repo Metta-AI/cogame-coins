@@ -46,6 +46,14 @@ type
     globalViewers: Table[WebSocket, ViewerState]
     seats: int
     finished: bool
+    ## The last frame the EPISODE THREAD drew, published under `stateLock`.
+    ## A spectator arriving on a mummy worker thread is served from here: the
+    ## episode thread appends to `sim.frames`/`sim.coins` every tick without
+    ## the lock, so reading `gameSim` from another thread is a read during a
+    ## seq reallocation.
+    lastFrame: Frame
+    lastChrome: string
+    published: bool
 
 var
   stateLock: Lock
@@ -101,19 +109,41 @@ proc declarePlayerFailure(slot: int, message: string) =
 proc pushGlobalLocked(events: JsonNode) =
   ## The board rides as a binary sprite packet, the chrome as a text frame —
   ## exactly what `client/broadcast_core.js` expects on either transport.
+  ##
+  ## Called from the EPISODE THREAD (and from the main thread before it
+  ## starts) with `stateLock` held: it is the only place `gameSim`'s mutating
+  ## state is read, and it PUBLISHES what it read so a spectator arriving on a
+  ## worker thread never has to read it again.
+  shared.lastFrame = gameSim.currentFrame()
+  shared.lastChrome = liveChromeJson(gameSim, events)
+  shared.published = true
   if shared.globalSockets.len == 0:
     return
-  let frame = gameSim.currentFrame()
-  let chrome = liveChromeJson(gameSim, events)
   for socket in shared.globalSockets:
     var viewer = shared.globalViewers.getOrDefault(socket, initViewerState())
-    var packet = buildBoardPacket(frame, viewer, events)
-    packet.addChrome(chrome)
+    var packet = buildBoardPacket(shared.lastFrame, viewer, events)
+    packet.addChrome(shared.lastChrome)
     shared.globalViewers[socket] = viewer
     try:
       socket.send(blobFromBytes(packet), BinaryMessage)
     except CatchableError:
       discard
+
+proc sendPublishedLocked(socket: WebSocket) =
+  ## The arrival frame for a spectator that has just connected, built from the
+  ## published snapshot rather than from `gameSim`. Runs on a mummy worker
+  ## thread with `stateLock` held. The live board is pushed at beat closes, so
+  ## this is the same frame the socket would have received anyway.
+  if not shared.published:
+    return
+  var viewer = shared.globalViewers.getOrDefault(socket, initViewerState())
+  var packet = buildBoardPacket(shared.lastFrame, viewer, newJArray())
+  packet.addChrome(shared.lastChrome)
+  shared.globalViewers[socket] = viewer
+  try:
+    socket.send(blobFromBytes(packet), BinaryMessage)
+  except CatchableError:
+    discard
 
 proc pushStateFrames() =
   for slot, socket in shared.playerSockets:
@@ -382,7 +412,7 @@ proc globalUpgradeHandler(request: Request) {.gcsafe.} =
     withLock stateLock:
       shared.globalSockets.incl(websocket)
       shared.globalViewers[websocket] = initViewerState()
-      pushGlobalLocked(newJArray())
+      sendPublishedLocked(websocket)
 
 proc handleRegister(slot: int, payload: JsonNode) =
   var prompt = payload{"prompt"}.getStr()
@@ -484,6 +514,10 @@ proc runGameServer*(config: GameConfig, cfg: RuntimeConfig) =
   shared.everRegistered = newSeq[bool](shared.seats)
   for slot in 0 ..< shared.seats:
     shared.policies[slot] = Aliases[slot]
+  ## Publish the opening frame before any thread but this one exists, so a
+  ## spectator that connects before the first beat close still gets a board.
+  withLock stateLock:
+    pushGlobalLocked(newJArray())
   let router = buildRouter()
   gameServer = newServer(router, websocketHandler, workerThreads = 4)
   createThread(gameThread, runGame, cfg)
