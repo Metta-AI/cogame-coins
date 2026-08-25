@@ -376,6 +376,49 @@ block:
     " vs " & $fastSim.beatsPlayed)
 
 # ---------------------------------------------------------------------------
+echo "--- the play deadline reserves the next beat"
+block:
+  ## The deadline is tested at beat closes, so whatever it lets start it must
+  ## also let FINISH: a beat pays up to a batch and a retry
+  ## (worstCaseBeatSeconds = 2 x llmTimeoutSeconds = 24 s at the defaults).
+  ## A clock parked inside that reserve must settle NOW, not one beat later.
+  var config = fixture(seed = 5, minB = 1, maxB = 24)
+  config.endChancePermille = 0        ## no random end: this measures the clock
+  check(config.worstCaseBeatSeconds() == 24, "24 s of worst case per beat")
+  var sim = initSim(config)
+  let inReserve = config.playDeadlineSeconds() -
+    config.worstCaseBeatSeconds().float / 2.0
+  proc clock(): float {.closure.} = inReserve
+  proc decide(view: Sim, seats: seq[int]): seq[Decision] {.closure.} =
+    for slot in seats:
+      result.add(Decision(intent: inTakeMine, source: osScripted))
+  sim.runEpisode(decide, clock)
+  check(sim.reason == erDeadline,
+    "a clock inside the last beat's reserve settles with `deadline`, got " &
+    $sim.reason)
+  check(sim.beatsPlayed == 1,
+    "and settles at the first beat close, not one beat past the deadline")
+  check(inReserve + config.worstCaseBeatSeconds().float >
+      config.playDeadlineSeconds(),
+    "the fixture clock really is inside the reserve")
+
+block:
+  ## And a clock clear of the reserve plays the whole episode.
+  var config = fixture(seed = 5, minB = 24, maxB = 24)
+  config.endChancePermille = 0
+  var sim = initSim(config)
+  let clear = config.playDeadlineSeconds() -
+    config.worstCaseBeatSeconds().float - 1.0
+  proc clock(): float {.closure.} = clear
+  proc decide(view: Sim, seats: seq[int]): seq[Decision] {.closure.} =
+    for slot in seats:
+      result.add(Decision(intent: inTakeMine, source: osScripted))
+  sim.runEpisode(decide, clock)
+  check(sim.reason == erBeatCap and sim.beatsPlayed == 24,
+    "clear of the reserve, the episode runs to its beat cap, got " &
+    $sim.reason & " after " & $sim.beatsPlayed & " beats")
+
+# ---------------------------------------------------------------------------
 echo "--- determinism"
 block:
   let a = runScripted(fixture(seed = 99, minB = 24, maxB = 24),

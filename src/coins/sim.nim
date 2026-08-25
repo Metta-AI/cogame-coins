@@ -646,10 +646,15 @@ proc runEpisode*(sim: var Sim, decide: DecideProc, now: ClockProc,
       onBeat(sim)
     if not keepPlaying:
       break
-    ## The play deadline is checked at BEAT CLOSES only. Crossing it settles
-    ## with `reason: "deadline"` — the beats played are scored exactly as
-    ## they happened and nothing is imputed for the beats not played.
-    if now() >= sim.config.playDeadlineSeconds():
+    ## The play deadline is checked at BEAT CLOSES only — and the NEXT beat's
+    ## worst case is reserved against it. A beat can pay a batch and a retry
+    ## (`worstCaseBeatSeconds` = 2 x llmTimeoutSeconds), so testing the bare
+    ## clock here would let the last beat start at the deadline and settle up
+    ## to that much past it. Crossing it settles with `reason: "deadline"` —
+    ## the beats played are scored exactly as they happened and nothing is
+    ## imputed for the beats not played.
+    if now() + sim.config.worstCaseBeatSeconds().float >=
+        sim.config.playDeadlineSeconds():
       sim.reason = erDeadline
       break
     sim.applyDecisions(decide(sim, seats))
