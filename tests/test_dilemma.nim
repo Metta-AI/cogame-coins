@@ -147,6 +147,31 @@ check(P < R * 0.6,
   " vs " & $R)
 check(D > S, "(d) punishment beats pacifism against greed: " & $D & " vs " & $S)
 
+## The design note's ABSOLUTE floors, not just the ordering: mutual restraint
+## has to be worth a real amount of score (a room where both cogs cooperate to
+## a mean of 1 is technically a dilemma and dramatically nothing), and the
+## mutual-harm trap has to be genuinely poor.
+check(R >= 10.0,
+  "(a) mutual restraint pays a mean of at least 10, got " & $R)
+check(P < 5.0,
+  "(b) the mutual-harm trap's mean is below 5, got " & $P)
+
+## Gates (c) and (d) are asserted on the MEANS above. The per-seed picture is
+## printed rather than gated: the reciprocator's edge over the honest seat
+## against greed is real but thin (tools/tune_baseline.nim's grid puts the
+## shipped punishThreshold/punishBeats at rank 29 of 45 for exactly this
+## measure), so a per-seed gate would be asserting a strength the baseline
+## does not have. Anyone retuning it should read these rows first.
+block:
+  var inversions = 0
+  echo "per-seed (d) reciprocator vs honest, both against greedy:"
+  for index in 0 ..< min(recip.len, ss.len):
+    let flag = if recip[index] > ss[index]: "" else: "   <- inversion"
+    if recip[index] <= ss[index]: inversions.inc
+    echo "  seed ", index + 1, ": reciprocator ", recip[index],
+      " vs honest ", ss[index], flag
+  echo "  inversions: ", inversions, " of ", recip.len, " seeds"
+
 check(minTotalPickups >= 20,
   "(e) every episode has at least 20 total pickups, got " &
   $minTotalPickups)
