@@ -2193,9 +2193,14 @@ button.beat-marker:focus-visible { outline: 1px solid var(--amber); }
       : 'BEAT ' + (cn.beat || 1) + ' / ' + beats;
     if (timeEl.textContent !== text) timeEl.textContent = text;
     var coins = cn.coinsOnBoard || 0;
+    // `s.mx` is the last tick INDEX (frames.len - 1); the caption counts
+    // TICKS, so a 320-tick episode reads `tick 240 of 320`, not `of 319`.
+    // (The inherited transport readout below keeps the chrome's own 0-based
+    // `240 / 319` — that one is a scrubber position, not a count.)
+    var ticks = (s.mx || 0) + 1;
     var cap = s.ph === 'gameover'
       ? beats + ' beats · ' + ((cn.results && cn.results.reason) || 'over')
-      : 'tick ' + s.t + ' of ' + (s.mx || 0) + ' · ' + coins +
+      : 'tick ' + s.t + ' of ' + ticks + ' · ' + coins +
         (coins === 1 ? ' coin on the board' : ' coins on the board');
     if (capEl.textContent !== cap) capEl.textContent = cap;
   }
