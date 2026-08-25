@@ -175,6 +175,48 @@ check($parseJson(resultsBytes) == $episode.resultsJson(),
   "results.json round-trips")
 
 # ---------------------------------------------------------------------------
+echo "--- the recorded frames come back FRAME BY FRAME, element by element"
+block:
+  ## Coins records STATE, not inputs: there is no re-simulation, so the
+  ## property the checklist's "replaying reproduces the recorded per-tick
+  ## state frame by frame" guards — a display fed by a parallel recording —
+  ## becomes this: the bytes the viewer parses carry the sim's own frames
+  ## exactly, every tick, every field. Nothing else the viewer draws can be
+  ## right if this is wrong, and nothing before this asserted more than the
+  ## frame COUNT, the config and the terminal frame.
+  let roundTrip = parseReplayBytes(readBack)
+  check(roundTrip.frames.len == episode.frames.len,
+    "the parsed replay carries one frame per recorded frame")
+  var mismatched = -1
+  for index in 0 ..< min(roundTrip.frames.len, episode.frames.len):
+    let want = episode.frames[index]
+    let got = roundTrip.frames[index]
+    if got.t != want.t or got.c != want.c or got.k != want.k or
+        got.sc != want.sc or got.th != want.th:
+      mismatched = index
+      break
+  check(mismatched < 0,
+    "every frame matches the sim's own, element by element (first " &
+    "mismatch at tick " & $mismatched & ")")
+  for index in 0 ..< roundTrip.frames.len:
+    check(roundTrip.frames[index].t == index,
+      "frame " & $index & " is the state at tick " & $index)
+  ## And the viewer's own re-derivation runs off exactly those frames: the
+  ## player's frame at tick i IS frame i (tests/test_viewer.nim then walks
+  ## every one of them through buildStateJson, the same proc the live server
+  ## calls).
+  var framePlayer = initReplayPlayer(roundTrip)
+  for index in 0 ..< roundTrip.frames.len:
+    framePlayer.seek(index)
+    let frame = framePlayer.frame()
+    if frame.t != episode.frames[index].t or
+        frame.sc != episode.frames[index].sc or
+        frame.c != episode.frames[index].c:
+      check(false, "the playhead at tick " & $index &
+        " does not return the sim's frame " & $index)
+      break
+
+# ---------------------------------------------------------------------------
 echo "--- the replay parses back into a playable playhead"
 block:
   let data = parseReplayBytes(readBack)
