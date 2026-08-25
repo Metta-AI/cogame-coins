@@ -384,7 +384,7 @@
   "variants": [
     {
       "id": "standard",
-      "default": true,
+      "name": "Standard",
       "description": "The base dilemma: a coin-starved room, a random end after beat 12.",
       "game_config": {
         "players": [
@@ -411,6 +411,7 @@
     },
     {
       "id": "long-shadow",
+      "name": "Long shadow",
       "description": "A long shadow of the future - restraint is much easier to sustain.",
       "game_config": {
         "players": [
@@ -437,6 +438,7 @@
     },
     {
       "id": "short-fuse",
+      "name": "Short fuse",
       "description": "The end comes early and often: endgame grabs are rational sooner.",
       "game_config": {
         "players": [
@@ -463,6 +465,7 @@
     },
     {
       "id": "harsh",
+      "name": "Harsh",
       "description": "Every theft costs the victim 3, so the mutual-harm trap is deeper.",
       "game_config": {
         "players": [
@@ -489,6 +492,7 @@
     },
     {
       "id": "scarce",
+      "name": "Scarce",
       "description": "Barely any coins: every single spawn is a decision both cogs are watching.",
       "game_config": {
         "players": [

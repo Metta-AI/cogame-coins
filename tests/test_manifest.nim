@@ -60,15 +60,17 @@ for variant in variants:
     "variant " & id & " declares num_agents " & $Seats)
   check(variant{"description"}.getStr().len > 0,
     "variant " & id & " carries a description")
+  check(variant{"name"}.getStr().len > 0,
+    "variant " & id & " carries a name")
+  check(not variant.hasKey("default"),
+    "variant " & id & " carries no 'default' key (the schema forbids it)")
   check(variant{"game_config"}{"players"}.len == Seats,
     "variant " & id & " seats exactly " & $Seats & " players")
 check("standard" in variantIds and "long-shadow" in variantIds and
       "short-fuse" in variantIds and "harsh" in variantIds and
       "scarce" in variantIds, "the five pinned variant ids are present")
-var defaults = 0
-for variant in variants:
-  if variant{"default"}.getBool(): defaults.inc
-check(defaults == 1, "exactly one default variant")
+check(variantIds[0] == "standard",
+  "'standard' is listed first, so it is the variant the platform seats by default")
 
 let cert = manifest{"certification"}
 check(cert{"game_config"}{"num_agents"}.getInt() == Seats,
