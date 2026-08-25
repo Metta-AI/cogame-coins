@@ -82,6 +82,14 @@ check("createElement('button')" in gameBlock,
 check("setAttribute('aria-label', label)" in gameBlock,
   "every beat marker carries an aria-label")
 check("CH.seek(tick)" in gameBlock, "and seeks to its tick on click")
+check("CH.C.getSpoilers" in gameBlock,
+  "and they obey the chrome's OWN spoilers state: the markers are built " &
+  "here (chrome_common's markBeat takes no label and is byte-identical to " &
+  "the starter's), so chrome_common's markerEls gate cannot see them and " &
+  "the game block applies the same rule to its own buttons")
+check("btn-spoilers" in gameBlock,
+  "including on the toggle itself, which fires while playback is paused " &
+  "and no transport render is coming")
 
 echo "--- the 360 px rules"
 check(".plate-name" in page, "the plates use .plate-name")

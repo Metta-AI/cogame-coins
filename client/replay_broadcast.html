@@ -2335,6 +2335,45 @@ button.beat-marker:focus-visible { outline: 1px solid var(--amber); }
     });
   }
 
+  /* ---- the spoilers gate applies to THESE markers too -------------------- */
+  /* chrome_common's own gate walks `markerEls` — the divs its
+     renderBeatMarkers placed. Coins' markers cannot come from that path: its
+     markBeat takes no label and builds a div, and chrome_common.js is
+     byte-identical to the starter's, so a labelled, clickable, per-kind
+     marker has to be built here (checklist 14(d)). That left "spoilers off"
+     meaning nothing on this scrubber. Read the chrome's OWN spoilers state
+     and apply the chrome's OWN rule to our buttons. */
+  function cnApplySpoilers(s) {
+    var scrub = cnDoc('scrub');
+    if (!scrub || !s) return;
+    var on = (CH.C && CH.C.getSpoilers) ? CH.C.getSpoilers() : true;
+    var tick = s.t || 0;
+    var markers = scrub.querySelectorAll('button.beat-marker');
+    for (var i = 0; i < markers.length; i++) {
+      var el = markers[i];
+      var hide = !on && el.__tick > tick;
+      if (el.__hidden !== hide) {
+        el.__hidden = hide;
+        el.style.display = hide ? 'none' : '';
+      }
+    }
+  }
+
+  /* The toggle itself: the chrome re-runs its gate on the next transport
+     render, which never arrives while playback is paused, so re-apply ours on
+     the click. The chrome's own listener is registered first and has already
+     flipped the state by the time this one runs. */
+  var cnSpoilersWired = false;
+  function cnWireSpoilers() {
+    if (cnSpoilersWired) return;
+    var btn = cnDoc('btn-spoilers');
+    if (!btn) return;
+    cnSpoilersWired = true;
+    btn.addEventListener('click', function () {
+      cnApplySpoilers(CH.state());
+    });
+  }
+
   /* ---- the feed: plain language, one row per event that matters ---------- */
   function cnPushRow(html, team, cls) {
     var row = document.createElement('div');
@@ -2461,6 +2500,8 @@ button.beat-marker:focus-visible { outline: 1px solid var(--amber); }
       cnRenderRecip(s);
       cnRenderThefts(s);
       cnIngestBeats(s);
+      cnWireSpoilers();
+      cnApplySpoilers(s);
       if (s.events && s.events.length && !jumped) {
         for (var i = 0; i < s.events.length; i++) {
           cnBanners(s.events[i]);
