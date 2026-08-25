@@ -95,6 +95,46 @@ check("#stage.tiny #cn-recip .cn-cell" in gameBlock,
 check("@media (max-width: 640px)" in gameBlock,
   "labels are hidden under 640 px")
 
+echo "--- the LLM remark rides a reserved band, and CI renders it"
+block:
+  ## The one string in this viewer an LLM writes is `say` (MaxSayLen runes).
+  ## The inherited `.feed-row` is `max-width: none; white-space: nowrap`,
+  ## sized for the starter's pre-bounded 10-char name, so the remark gets a
+  ## band of its own — the feed's own width, wrapping inside it, never
+  ## ellipsized. The geometry is measured by tools/ci/text_fixture.js; these
+  ## are the shape checks that keep the two in step.
+  check("class=\"glyph cn-say\"" in gameBlock,
+    "the LLM remark is drawn into its own .cn-say span")
+  check("'cn-order'" in gameBlock,
+    "and the row carrying it is tagged .cn-order")
+  let cssFrom = gameBlock.find(".feed-row.cn-order {")
+  let cssTo = gameBlock.find("/* ---- 360 px")
+  check(cssFrom >= 0 and cssTo > cssFrom, "the .cn-order rules are present")
+  let orderCss = gameBlock[max(cssFrom, 0) .. max(cssTo, 0)]
+  check("max-width: 100%;" in orderCss,
+    ".feed-row.cn-order is bounded by the feed's own width — the band is " &
+    "sized from the cap the server enforces on `say`, not by eye")
+  check("white-space: normal;" in orderCss and
+      "overflow-wrap: anywhere;" in orderCss,
+    "and the remark WRAPS inside that band: an ellipsized sentence means " &
+    "the box is too small, so widen the band, never shorten the text")
+  check("text-overflow: ellipsis" notin orderCss,
+    "no ellipsis rule reaches the remark")
+  let fixture = readFile(root / "tools" / "ci" / "text_fixture.js")
+  check("MaxSayLen" in fixture and "data-replay-error" in fixture and
+      "data-replay-loaded" in fixture,
+    "tools/ci/text_fixture.js renders full-cap remarks and signals both " &
+    "markers viewer_smoke.mjs reads")
+  check("cn-say" in fixture,
+    "the fixture measures the span the game block actually draws")
+  let ci = readFile(root / ".github" / "workflows" / "ci.yml")
+  check("tools/ci/build_text_fixture.sh" in ci and
+      "--bundle dist/text-fixture" in ci,
+    "ci.yml drives the fixture in its own step")
+  check(ci.count("--strict-text-bounds") >= 2,
+    "and that step carries --strict-text-bounds, so a remark that outgrows " &
+    "its band is a red job rather than a line in a log")
+
 echo "--- no game-block top-level name collides with the chrome alias list"
 block:
   ## The chrome alias block is `var X = C.Y, ...` at the top of the page's

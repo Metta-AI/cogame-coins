@@ -322,6 +322,63 @@ jobs:
             --soak 10 \
             --strict-text-bounds
 
+      # -----------------------------------------------------------------
+      # THE CI REPLAY CANNOT TALK. docker_smoke.sh runs with no
+      # ANTHROPIC_API_KEY, so every seat falls back to a scripted baseline and
+      # a scripted decision carries no `say` (src/coins/llm.nim's
+      # fallbackDecision). Every replay this workflow can produce therefore
+      # carries ZERO LLM text: the step above reported `feed_lines: 0` and
+      # `canvas text: 0 drawn` over the one class of chrome that exists only
+      # to show what a model said, and `total: 0` "means the check covered
+      # nothing" (prompts/30-review-loop.md item 15; cogchemists 2026-08-24
+      # shipped four clipped speech bubbles behind a fully green board for
+      # exactly this reason).
+      #
+      # So this step hands the REAL page -- client/replay_broadcast.html
+      # spliced the way it is served, with its socket stubbed -- four full-cap
+      # 48-rune remarks at once, one on every seat, at six stage widths from
+      # the 360 px featured-match iframe up past the --hudscale clamp, in
+      # Latin, CJK and sentence shapes. It fails if any remark is shortened,
+      # clipped, or laid out past the band the layout reserves for it, and it
+      # mirrors every measured line onto a canvas the size of that band so
+      # --strict-text-bounds reports a REAL canvas_text count.
+      # -----------------------------------------------------------------
+      - name: Render the worst-case remark fixture
+        run: |
+          set -euo pipefail
+          test -x tools/ci/build_text_fixture.sh || {
+            echo "::error::tools/ci/build_text_fixture.sh is missing or not"
+            echo "::error::executable; it assembles the worst-case renderer"
+            echo "::error::fixture, the only gate that draws LLM text."
+            exit 1; }
+          replay=""
+          for candidate in dist/smoke/*.replay dist/smoke/replay.json; do
+            if [ -f "${candidate}" ]; then replay="${candidate}"; break; fi
+          done
+          test -n "${replay}" || {
+            echo "::error::docker-smoke uploaded no replay to dist/smoke"; exit 1; }
+          ./tools/ci/build_text_fixture.sh dist/static-replay-viewer dist/text-fixture
+          mkdir -p dist/fixture-evidence
+          node tools/ci/viewer_smoke.mjs \
+            --bundle dist/text-fixture \
+            --replay "${replay}" \
+            --timeout 90 \
+            --strict-text-bounds \
+            --out "$PWD/dist/fixture-evidence"
+          # The fixture's own per-size measurements, from the harness's
+          # console capture -- the evidence line for item 15.
+          node -e '
+            const j = require("./dist/fixture-evidence/viewer-smoke.json");
+            for (const line of j.console_tail) {
+              if (line.includes("text-fixture")) console.log(line);
+            }
+            console.log("fixture canvas_text: " + JSON.stringify(j.canvas_text && {
+              total: j.canvas_text.total,
+              never_inside: j.canvas_text.never_inside,
+              outside: j.canvas_text.outside,
+              ellipsized: j.canvas_text.ellipsized
+            }));'
+
       - name: Upload the viewer smoke evidence
         # Always: the screenshot and the JSON are most useful when the job is red.
         if: always()
@@ -331,6 +388,7 @@ jobs:
           path: |
             viewer-smoke.png
             viewer-smoke.json
+            dist/fixture-evidence
           if-no-files-found: warn
           retention-days: 14
 

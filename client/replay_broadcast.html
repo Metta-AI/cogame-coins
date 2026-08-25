@@ -2023,6 +2023,36 @@ button.beat-marker:focus-visible { outline: 1px solid var(--amber); }
 #endcard .cn-erow + .cn-erow { border-top: 1px solid rgba(242, 232, 216, 0.1); }
 #stage.tiny #endcard .ec-teams { max-width: 100%; }
 
+/* ---- the order row's remark: a reserved band, sized from MaxSayLen ------ */
+/* The inherited `.feed-row` is `max-width: none; white-space: nowrap`, and the
+   starter's own comment says why that is safe THERE: its rows carry a
+   pre-bounded 10-char name and a glyph, "so it can't run away". Coins' order
+   row also carries the LLM-authored `say`, capped at MaxSayLen = 48 RUNES
+   (src/coins/sim_types.nim) — in CJK that is ~430 --u of type, several times
+   the width the starter's geometry was sized for, growing leftward out of the
+   feed and across the arena.
+   So the remark gets a band of its own: the feed's own width — 228 --u, or
+   190 --u under the starter's #stage.tiny rule, which `max-width: 100%`
+   follows either way — with the remark on its own line inside it, wrapping
+   rather than ellipsizing (a remark is a sentence, and an ellipsized sentence
+   means the box is too small — prompts/30-review-loop.md item 15). Rows only
+   ever grow upward (#killfeed is column-reverse, bottom-anchored, with its
+   4-row reserve), so a remark landing never moves anything below it.
+   tools/ci/text_fixture.js renders four full-cap remarks at once at six stage
+   widths and measures every line box against that band. */
+.feed-row.cn-order {
+  max-width: 100%;
+  flex-wrap: wrap;
+  row-gap: calc(2 * var(--u));
+}
+.feed-row.cn-order .cn-say {
+  flex: 1 1 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
 /* ---- 360 px: the featured-match iframe ---------------------------------- */
 /* relayout() toggles #stage.tiny at boardW <= 620 and is kept verbatim; these
    three rules are all Coins adds on top of it. Under .tiny each plate keeps
@@ -2334,11 +2364,15 @@ button.beat-marker:focus-visible { outline: 1px solid var(--amber); }
         CH.beatPulse();
         break;
       case 'order':
-        var say = e.say ? ' <span class="glyph">\u201c' + cnEsc(e.say) +
+        // `say` is LLM-authored and capped at MaxSayLen = 48 runes. It rides
+        // in .cn-say, which the style block gives a reserved band of the
+        // feed's own width and wraps inside it — the inherited .feed-row is
+        // `nowrap` with no max-width and was sized for a 10-char name.
+        var say = e.say ? ' <span class="glyph cn-say">\u201c' + cnEsc(e.say) +
           '\u201d</span>' : '';
         cnPushRow(who + ' <span class="glyph">' + cnEsc(e.intent) + '</span>' +
           say + (e.source === 'fallback'
-            ? ' <span class="badge tk">auto</span>' : ''), team);
+            ? ' <span class="badge tk">auto</span>' : ''), team, 'cn-order');
         break;
       case 'leadchange':
         CH.banner(cnAlias[seat] + ' TAKES THE LEAD', 'accent');
