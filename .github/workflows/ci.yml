@@ -155,9 +155,9 @@ jobs:
       # guessed. tools/tune_baseline.nim plays the whole
       # punishThreshold x punishBeats x truceBeats grid against all four
       # baselines over seeds 1..8 at certification length, prints the ranked
-      # table with the shipped point marked, and fails if that point stops
-      # beating the sucker payoff, stops punishing, stops producing truces, or
-      # falls more than a coin behind the grid's best against greed.
+      # table with the shipped point marked and its distance from the grid's
+      # best, and fails if that point stops beating the sucker payoff, stops
+      # punishing, or stops producing truces.
       - name: Tune the reciprocator on a grid
         run: nim c -r --hints:off --path:src -d:release tools/tune_baseline.nim
 

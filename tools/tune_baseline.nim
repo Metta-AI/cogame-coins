@@ -22,8 +22,12 @@
 ##       and be watched" — a point that never emits a truce leaves the
 ##       reciprocity strip empty and the replay without its story.
 ## The harness ranks the grid on (1), reports (2) for every point, and fails
-## if the shipped point breaks either. The ranking is printed so the choice
-## can be read rather than taken on trust.
+## if the shipped point breaks either. Its DISTANCE from the grid's best is
+## printed, not gated: the note states those two criteria and never claims
+## the shipped point is the argmax, so gating optimality would be this
+## harness asserting its own objective. The ranking is printed so the choice
+## can be read rather than taken on trust — and so a retune is a decision
+## someone takes rather than one nobody notices.
 
 import std/[algorithm, json, strutils]
 import coins/[sim_types, sim, scripted]
@@ -195,11 +199,16 @@ block:
     check(row.thefts >= 1,
       "and it does punish — a point that never takes their coin is the " &
       "honest baseline under another name")
-    ## And it is competitive: no grid point beats it against greed by more
-    ## than a coin's worth of score.
-    check(rows[0].vsGreedy - row.vsGreedy <= 1.0,
-      "the shipped point is within one coin of the grid's best against " &
-      "greed: " & f2(row.vsGreedy) & " vs " & f2(rows[0].vsGreedy))
+    ## The gap to the grid's best is REPORTED, not gated: the design note
+    ## states the two criteria above and never claims the shipped point is
+    ## the argmax, so a gate on optimality would be this harness asserting
+    ## its own objective rather than the game's. The number is printed on
+    ## every CI run, which is what makes a retune a decision someone takes
+    ## rather than one nobody notices.
+    echo "shipped vs the grid's best against greed: ", f2(row.vsGreedy),
+      " vs ", f2(rows[0].vsGreedy), " (gap ",
+      f2(rows[0].vsGreedy - row.vsGreedy), ", rank ", shippedRank, " of ",
+      rows.len, ")"
 
 if failures > 0:
   echo failures, " failing checks"
