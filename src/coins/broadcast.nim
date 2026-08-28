@@ -115,7 +115,7 @@ proc buildStateJson*(player: ReplayPlayer, events: JsonNode,
     "mt": player.maxTick(),
     "ph": (if atEnd: "gameover" else: "playing"),
     "pl": player.playing,
-    "sp": player.speed,
+    "sp": player.displaySpeed(),
     "mx": player.maxTick(),
     "st": 0,
     "lp": player.looping,
@@ -203,7 +203,7 @@ proc liveChromeJson*(sim: Sim, events: JsonNode): string =
   var state = %*{
     "t": sim.tick, "mt": maxTick, "ph": (if sim.finished: "gameover"
                                          else: "playing"),
-    "pl": true, "sp": 1, "mx": maxTick, "st": 0, "lp": false, "sk": false,
+    "pl": true, "sp": 1.0, "mx": maxTick, "st": 0, "lp": false, "sk": false,
     "ff": false, "en": false, "mm": -1, "bs": 1, "pov": -1,
     "teams": teams, "roster": roster,
     "events": (if events.isNil: newJArray() else: events),
