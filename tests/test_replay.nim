@@ -265,6 +265,40 @@ block:
     if player.tick != before: advanced.inc
   check(advanced > 0, "playback advances")
 
+# ---------------------------------------------------------------------------
+echo "--- half speed is a replay-only crawl"
+block:
+  ## The fleet-wide 1/2x replay speed: command '5' selects the
+  ## ReplayHalfSpeed sentinel, the chrome shows 0.5, and advance() spends
+  ## one tick every OTHER frame (halfPhase parity) outside lulls.
+  var half = initReplayPlayer(parseReplayBytes(readBack))
+  half.applyCommand('5')
+  check(half.speed == ReplayHalfSpeed, "'5' must select 1/2x")
+  check(half.displaySpeed() == 0.5,
+    "the chrome speed at 1/2x is 0.5, got " & $half.displaySpeed())
+  half.seek(0)
+  half.playing = true
+  half.skipLulls = false
+  half.halfPhase = false
+  half.advance()
+  check(half.tick == 1, "the odd frame at 1/2x spends one tick")
+  half.advance()
+  check(half.tick == 1, "the even frame at 1/2x spends no tick")
+  var frames = 0
+  while frames < 10:
+    half.advance()
+    frames.inc
+  check(half.tick == 6, "10 more frames advance 5 ticks at 1/2x")
+  half.applyCommand('+')
+  check(half.speed == 1, "'+' from 1/2x lands on 1x")
+  half.applyCommand('-')
+  check(half.speed == ReplayHalfSpeed, "'-' from 1x lands on 1/2x")
+  half.applyCommand('-')
+  check(half.speed == ReplayHalfSpeed, "1/2x is the floor")
+  half.applyCommand('2')
+  check(half.speed == 2 and half.displaySpeed() == 2.0,
+    "the integer chips still work after 1/2x")
+
 if failures > 0:
   echo failures, " failing checks"
   quit(1)

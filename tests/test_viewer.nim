@@ -39,9 +39,14 @@ let bannerAt = page.find(BannerMarker)
 check("window.ChromeCommon" in chromeCommon,
   "client/chrome_common.js is the shared chrome module")
 check("var WIRE = window.CTF_WIRE" in chromeCommon,
-  "chrome_common.js is byte-for-byte the starter's — including the wire " &
-  "constants object name it reads, which is why wire_constants.js emits " &
-  "BOTH window.CTF_WIRE and the window.COINS_WIRE alias")
+  "chrome_common.js is the starter's plus the fleet-wide 0.5x transport " &
+  "patch — including the wire constants object name it reads, which is " &
+  "why wire_constants.js emits BOTH window.CTF_WIRE and the " &
+  "window.COINS_WIRE alias")
+check("0.5: '5'" in chromeCommon,
+  "the speed chips map the fleet-wide 0.5x chip to command '5'")
+check("[0.5, 1, 2, 3, 4, 8, 16]" in chromeCommon,
+  "and the raw file:// SPEEDS fallback carries 0.5 too")
 check("cp client/chrome_common.js replay-viewer/dist/chrome_common.js" in
   viewerDockerfile,
   "the bundle copies chrome_common.js verbatim — no sed, no rewrite")

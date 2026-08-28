@@ -170,12 +170,20 @@ proc parseReplayBytes*(data: string): ReplayData =
 # the playhead
 # ---------------------------------------------------------------------------
 
+const ReplayHalfSpeed* = 0
+  ## `speed` sentinel for the replay-only 1/2x playback (command '5'):
+  ## one tick is spent every other presentation frame (halfPhase parity).
+
 type
   ReplayPlayer* = object
     data*: ReplayData
     tick*: int
     playing*: bool
     speed*: int
+      ## Integer playback multiplier, or ReplayHalfSpeed (0) for 1/2x.
+    halfPhase*: bool
+      ## Frame parity while at 1/2x speed: ticks advance only on the odd
+      ## frames, toggled once per advance() frame.
     looping*: bool
     skipLulls*: bool
     fastForwarding*: bool
@@ -201,6 +209,12 @@ proc initReplayPlayer*(data: ReplayData): ReplayPlayer =
 
 proc maxTick*(player: ReplayPlayer): int =
   max(player.data.frames.len - 1, 0)
+
+proc displaySpeed*(player: ReplayPlayer): float =
+  ## The speed the chrome shows: 0.5 at the half-speed sentinel, else the
+  ## integer multiplier.
+  if player.speed == ReplayHalfSpeed: 0.5
+  else: float(player.speed)
 
 proc isLullTick*(player: ReplayPlayer, tick: int): bool =
   for span in player.data.lulls:
@@ -229,8 +243,11 @@ proc applyCommand*(player: var ReplayPlayer, command: char) =
   of 'e': player.seek(player.maxTick()); player.playing = false
   of 'r': player.looping = not player.looping
   of 'f': player.skipLulls = not player.skipLulls
-  of '+': player.speed = min(player.speed * 2, 16)
-  of '-': player.speed = max(player.speed div 2, 1)
+  of '+': player.speed = clamp(player.speed * 2, 1, 16)
+  of '-':
+    # 1 div 2 == ReplayHalfSpeed: '-' from 1x lands on 1/2x, the floor.
+    player.speed = player.speed div 2
+  of '5': player.speed = ReplayHalfSpeed
   of '1': player.speed = 1
   of '2': player.speed = 2
   of '3': player.speed = 3
@@ -242,6 +259,7 @@ proc applyCommand*(player: var ReplayPlayer, command: char) =
 proc advance*(player: var ReplayPlayer) =
   ## One presentation frame. Returns with `pendingEvents` holding everything
   ## crossed since the last call.
+  player.halfPhase = not player.halfPhase
   player.pendingEvents = newJArray()
   player.fastForwarding = false
   if not player.playing:
@@ -253,10 +271,14 @@ proc advance*(player: var ReplayPlayer) =
       player.endHoldFrames = 0
       player.seek(0)
     return
-  var steps = player.speed
+  var steps = max(player.speed, 1)
   if player.skipLulls and player.isLullTick(player.tick):
-    steps = min(player.speed * 8, 64)
+    steps = min(steps * 8, 64)
     player.fastForwarding = true
+  elif player.speed == ReplayHalfSpeed:
+    # 1/2x: spend one tick only every other frame (never inside the
+    # lull boost above, which keeps its full 1x catch-up pace).
+    steps = (if player.halfPhase: 1 else: 0)
   for _ in 0 ..< steps:
     if player.tick >= player.maxTick():
       break
