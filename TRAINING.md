@@ -35,3 +35,18 @@ context with the Qwen2.5-0.5B-Instruct tokenizer (maximum: 1,738 tokens).
 One CPU optimizer step per dataset with a local tiny model verifies the Metta
 post-training path. These examples distill the scripted teacher; they do not
 establish stronger league play.
+
+For reinforcement learning, compile the persistent bridge and test all five
+certified variants:
+
+```sh
+nim c -d:release --path:src -o:coins-train-bridge tools/train_bridge.nim
+python3 tools/test_train_bridge.py ./coins-train-bridge
+```
+
+From Metta, use `recipes.external.coworld.train` for native PufferLib or
+`recipes.external.coworld_metta_rl.train` for Metta RL. Pass a command with
+absolute bridge and manifest paths, the variant ID, `players=2`, and a
+timestep limit. The bridge exposes 32 player-visible numeric values and the
+five native intents. The published `reciprocator` policy supplies opponents
+and optional teacher labels. Metta support is stacked in #24679 above #24573.
