@@ -51,8 +51,9 @@ for arm in (("jev", "claude", "reciprocator") if include_claude
     containers = []
     docker("network", "create", network)
     try:
-        game_env = dict(os.environ, TYPESAFE_API_KEY=key)
-        provider_env = ["-e", "TYPESAFE_API_KEY"]
+        game_env = dict(os.environ)
+        game_env.pop("TYPESAFE_API_KEY", None)
+        provider_env = []
         if arm == "claude":
             game_env["ANTHROPIC_API_KEY"] = os.environ["ANTHROPIC_API_KEY"]
             provider_env.extend(["-e", "ANTHROPIC_API_KEY"])
@@ -75,7 +76,7 @@ for arm in (("jev", "claude", "reciprocator") if include_claude
             containers.append(player)
             policy_env = ["-e", "PLAYER_SCRIPTED=reciprocator"]
             if seat == 0 and arm == "jev":
-                policy_env = ["-e", "PLAYER_JEV=1", "-e", "PLAYER_PROMPT= "]
+                policy_env = ["-e", "PLAYER_JEV=1", "-e", "TYPESAFE_API_KEY"]
             elif seat == 0 and arm == "claude":
                 policy_env = ["-e", "PLAYER_LLM=1", "-e", "PLAYER_PROMPT= "]
             docker(
@@ -83,22 +84,23 @@ for arm in (("jev", "claude", "reciprocator") if include_claude
                 "-e", f"COWORLD_PLAYER_WS_URL=ws://{game}:8080/player?slot={seat}&token=token-{seat}",
                 "-e", f"COWORLD_POLICY_NAME={arm if seat == 0 else 'reciprocator'}",
                 *policy_env, image, "/bin/coins-player",
+                env=dict(os.environ, TYPESAFE_API_KEY=key),
             )
         exits = [docker("wait", name, timeout=240) for name in containers]
         assert exits == ["0", "0", "0"], exits
         results = json.loads((out / "results.json").read_text())
         replay = json.loads((out / "replay.json").read_text())
         if arm in ("jev", "claude"):
-            log = docker("logs", game)
+            log = docker("logs", prefix + "-p0" if arm == "jev" else game)
             orders = [event for event in replay["events"]
                       if event["k"] == "order" and event["seat"] == 0]
             if arm == "jev":
                 calls = re.findall(
-                    r"coins jev: intent (\S+) reported \S+ confidence [\d.]+ model \S+ input_tokens (\d+) output_tokens (\d+)",
+                    r"Coins Jev player: intent (\S+) model \S+ input_tokens (\d+) output_tokens (\d+)",
                     log,
                 )
                 assert len(calls) == len(orders) == 8
-                assert all(call[0] == order["intent"] and order["source"] == "jev"
+                assert all(call[0] == order["intent"] and order["source"] == "external"
                            for call, order in zip(calls, orders))
                 token_counts = [(int(call[1]), int(call[2])) for call in calls]
             else:

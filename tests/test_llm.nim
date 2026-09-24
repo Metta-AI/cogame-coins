@@ -5,7 +5,7 @@
 ## reciprocator fallback; and ONE batch carrying every open seat with the
 ## inter-batch wall-clock floor honoured.
 
-import std/[json, strutils, times, unicode]
+import std/[json, os, strutils, times, unicode]
 import coins/[sim_types, sim, scripted, llm]
 
 var failures = 0
@@ -92,32 +92,6 @@ block:
       "and it is recorded with source fallback")
     check($fallback.source == "fallback", "which serialises as \"fallback\"")
 
-echo "--- Jev probabilities select a legal intent and reject bad choices"
-block:
-  let criteria = jevCriteria()
-  let response = %*{
-    "model": "typesafe/jev-1.13",
-    "usage": {"input_tokens": 80, "output_tokens": 12},
-    "answers": {"decision": {
-      "type": "choice", "choice": "take_any", "confidence": 0.8,
-      "probabilities": {
-        "take_mine": 0.60, "take_any": 0.20, "take_theirs": 0.10,
-        "guard": 0.05, "hold": 0.05
-      }
-    }}
-  }
-  let decision = jevDecision(response, criteria)
-  check(decision.intent == inTakeMine, "probability maximum beats reported choice")
-  check(decision.source == osJev, "replay marks the decision as Jev")
-  var bad = response.copy()
-  bad["answers"]["decision"]["probabilities"]["take_mine"] = %0.4
-  check(raises(proc () = discard jevDecision(bad, criteria)),
-    "probabilities must sum to one")
-  bad = response.copy()
-  bad["answers"]["decision"]["probabilities"].delete("hold")
-  check(raises(proc () = discard jevDecision(bad, criteria)),
-    "all five legal choices must be present")
-
 echo "--- with no credentials the client disables itself and never raises"
 block:
   ## No AWS sidecar and no ANTHROPIC_API_KEY in CI: the client must disable
@@ -131,8 +105,7 @@ block:
   var decisions: seq[Decision]
   let started = epochTime()
   check(not raises(proc () =
-    decisions = client.decideAll(sim, seats, prompts, kinds,
-      @[false, false])),
+    decisions = client.decideAll(sim, seats, prompts, kinds)),
     "decideAll never raises")
   check(decisions.len == 2, "one decision per seat")
   for decision in decisions:
@@ -151,7 +124,7 @@ block:
   var sim = initSim(config())
   let before = client.batchStarts.len
   let decisions = client.decideAll(sim, @[0, 1], @["", ""],
-    @[skHonest, skGreedy], @[false, false])
+    @[skHonest, skGreedy])
   check(decisions.len == 2, "two decisions")
   check(decisions[0].source == osScripted and decisions[1].source == osScripted,
     "both seats are scripted")
@@ -166,8 +139,8 @@ block:
   let client = newLlmClient(config())
   var sim = initSim(config())
   for beat in 0 .. 2:
-    discard client.decideAll(sim, @[0, 1], @["a", "b"],
-      @[skNone, skNone], @[false, false])
+    discard client.decideAll(sim, @[0, 1], @["a", "b"], @[skNone, skNone],
+      proc (seconds: float) {.closure.} = sleep(int(seconds * 1000)))
   if client.disabled:
     check(client.batchStarts.len == 0,
       "a disabled client opens no batches at all")

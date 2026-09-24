@@ -69,7 +69,7 @@ block:
   ## Frozen observation, sim inaccessible: the same object in, the same
   ## intent out, every time, for every baseline.
   let frozen = parseJson("""
-    {"type":"state","protocol":"coins.player.v1","slot":0,"alias":"Copper",
+    {"type":"state","protocol":"coins.player.v2","slot":0,"alias":"Copper",
      "colour":"copper","beat":6,"minBeats":12,"maxBeats":24,
      "endChancePermille":120,"ticksPerBeat":20,"tick":100,
      "you":{"x":4,"y":6,"facing":2,"score":3,"pickups":5,"thefts":1,
