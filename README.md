@@ -24,7 +24,7 @@ It is a spatial repeated Prisoner's Dilemma, ported from Melting Pot's
 
 Higher score wins. Scores are whole integers and can go negative.
 
-## A policy is just a prompt
+## Prompt, Jev, and scripted policies
 
 Both policy kinds ship in **one image**, env-switched:
 
@@ -39,7 +39,23 @@ coworld upload-policy <coins-image> --name my-coins \
 as a built-in baseline instead; the game plays those deterministically with no
 LLM at all.
 
-`/bin/coins-player` is a thin process: it connects, delivers its prompt, and
+For a Jev System One policy, register the same player image with `PLAYER_JEV=1`:
+
+```bash
+coworld upload-policy <coins-image> --name my-coins-jev \
+  --run /bin/coins-player --env PLAYER_JEV=1
+```
+
+The game server sends Jev the seat's current observation and ranks the five
+legal intents. It applies the highest-probability intent after validating the
+entire probability set. The replay labels these orders `source: "jev"`. Jev
+does not write the spectator `say` field or private `notes`; this pilot tests
+visible restraint and retaliation through movement. The server uses its
+hosted Bedrock sidecar, `METTA_CAPTURE_URL` with `METTA_CAPTURE_KEY`, or a
+direct `TYPESAFE_API_KEY`, in that order. A missing Jev route falls back to
+the scripted reciprocator.
+
+`/bin/coins-player` is a thin process: it connects, delivers its policy selection, and
 then only listens. **Every decision is made inside the game container**, which
 is what makes one parallel batch per beat possible — both seats decide
 *simultaneously*, so both requests go out together (`curly.makeRequests`),

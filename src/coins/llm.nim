@@ -1,6 +1,5 @@
-## Claude-backed decision making for Coins. A policy is just a prompt: the
-## GAME server composes each seat's observation plus that seat's prompt and
-## asks Claude what it does this beat.
+## Prompt and Jev decision making for Coins. The GAME server composes each
+## seat's observation and asks Claude for a full action or Jev to rank intents.
 ##
 ## Forked from `cogame-bullwhip/src/bullwhip/llm.nim`. Decisions are
 ## SIMULTANEOUS by rule, so both seats' requests go out as ONE parallel batch
@@ -9,13 +8,13 @@
 ## beat, with a hint; anything still failing falls back to the scripted
 ## `reciprocator` move.
 ##
-## Credentials, in order of preference:
+## Claude credentials, in order of preference:
 ##   Bedrock sidecar / bearer token   - hosted pods
 ##   ANTHROPIC_API_KEY                - the key itself
 ##   ANTHROPIC_API_KEY_URI            - a URI holding the key
-## With none present the client disables itself immediately and every seat
-## plays `reciprocator`, which is what keeps offline certification green and
-## deterministic.
+## Jev uses the hosted Bedrock sidecar, the Metta capture proxy, or a direct
+## TypeSafe key. Without either provider, prompt and Jev seats use the scripted
+## reciprocator, which keeps offline certification deterministic.
 
 import
   std/[json, os, strutils, times],
@@ -40,6 +39,10 @@ type
     bedrockModels: seq[string]
     bedrockModel: int
     bedrockToken: string
+    jevEndpoint: string
+    jevKey: string
+    jevModel: string
+    jevTrajectoryId: string
     model: string
     maxOutputTokens: int
     timeoutSeconds: int
@@ -92,6 +95,23 @@ proc newLlmClient*(config: GameConfig): LlmClient =
   )
   let bedrockEndpoint = getEnv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME").strip()
   let bedrockToken = getEnv("AWS_BEARER_TOKEN_BEDROCK").strip()
+  let captureUrl = getEnv("METTA_CAPTURE_URL").strip()
+  let typesafeKey = getEnv("TYPESAFE_API_KEY").strip()
+  if bedrockEndpoint.len > 0:
+    result.jevEndpoint = bedrockEndpoint.strip(chars = {'/'}, leading = false)
+    result.jevModel = "typesafe/jev-1.13"
+  elif captureUrl.len > 0:
+    result.jevEndpoint = captureUrl.strip(chars = {'/'}, leading = false)
+    result.jevKey = getEnv("METTA_CAPTURE_KEY").strip()
+    if result.jevKey.len == 0:
+      raise newException(CoinsError, "METTA_CAPTURE_KEY is required")
+    result.jevModel = "typesafe/jev-1.13"
+    result.jevTrajectoryId = "coins-jev-" & $config.seed
+  elif typesafeKey.len > 0:
+    result.jevEndpoint = getEnv("TYPESAFE_BASE_URL",
+      "https://api.typesafe.ai").strip(chars = {'/'}, leading = false)
+    result.jevKey = typesafeKey
+    result.jevModel = getEnv("TYPESAFE_DEFAULT_MODEL", "jev-latest")
   if bedrockEndpoint.len > 0 or bedrockToken.len > 0:
     let region = getEnv("AWS_REGION", getEnv("AWS_DEFAULT_REGION", "us-west-2"))
     let endpoint =
@@ -113,7 +133,9 @@ proc newLlmClient*(config: GameConfig): LlmClient =
   else:
     result.transport = ltNone
     result.disabled = true
-    echo "coins llm: no LLM credentials; every seat plays reciprocator"
+    if result.jevEndpoint.len > 0:
+      result.curl = newCurly()
+    echo "coins llm: no Claude credentials; prompt seats play reciprocator"
 
 # ---------------------------------------------------------------------------
 # text hygiene
@@ -345,6 +367,47 @@ proc scriptedDecision*(view: Sim, slot: int, kind: ScriptKind): Decision =
     source: osScripted
   )
 
+proc jevCriteria*(): JsonNode =
+  %*{
+    "take_mine": "Walk to the nearest coin of your colour without stepping on the other's coins.",
+    "take_any": "Walk to the nearest coin of either colour; taking the other's coin harms them by two points.",
+    "take_theirs": "Walk to the nearest coin of the other's colour and take it.",
+    "guard": "Walk to your coin nearest the other cog without stepping on their coins.",
+    "hold": "Stand still without taking a coin."
+  }
+
+proc jevDecision*(payload, criteria: JsonNode): Decision =
+  let answer = payload["answers"]["decision"]
+  let probabilities = answer["probabilities"]
+  let reported = answer["choice"].getStr()
+  if answer["type"].getStr() != "choice" or
+      not criteria.hasKey(reported) or probabilities.len != criteria.len:
+    raise newException(CoinsError, "Jev returned the wrong choice set")
+  let confidence = answer["confidence"].getFloat()
+  if confidence < 0 or confidence > 1:
+    raise newException(CoinsError, "Jev confidence is outside [0, 1]")
+  var total = 0.0
+  var best = -1.0
+  var choice = ""
+  for name, probability in probabilities.pairs:
+    if not criteria.hasKey(name):
+      raise newException(CoinsError, "Jev returned an unknown choice")
+    let value = probability.getFloat()
+    if value < 0 or value > 1:
+      raise newException(CoinsError, "Jev probability is outside [0, 1]")
+    total += value
+    if value > best:
+      best = value
+      choice = name
+  if abs(total - 1) > probabilities.len.float * 0.005 + 1e-6:
+    raise newException(CoinsError, "Jev probabilities do not sum to one")
+  result.intent = parseIntent(choice)
+  result.source = osJev
+  echo "coins jev: intent ", choice, " reported ", reported,
+    " confidence ", confidence, " model ", payload{"model"}.getStr(),
+    " input_tokens ", payload["usage"]{"input_tokens"}.getInt(),
+    " output_tokens ", payload["usage"]{"output_tokens"}.getInt()
+
 proc pacedWait*(client: LlmClient, nowSeconds: float): float =
   ## The seconds a batch must wait before it may start. The Bedrock sidecar
   ## caps 30 requests/minute PER EPISODE (the raid learning); with 2 seats
@@ -355,7 +418,7 @@ proc pacedWait*(client: LlmClient, nowSeconds: float): float =
   if due > nowSeconds: due - nowSeconds else: 0.0
 
 proc decideAll*(client: LlmClient, view: Sim, seats: seq[int],
-    prompts: seq[string], scripted: seq[ScriptKind],
+    prompts: seq[string], scripted: seq[ScriptKind], jev: seq[bool],
     sleepFor: proc (seconds: float) {.closure.} = nil): seq[Decision] =
   ## One decision per seat in `seats`, in order. NEVER raises: any failure
   ## falls back to the scripted move so the episode always advances.
@@ -365,7 +428,8 @@ proc decideAll*(client: LlmClient, view: Sim, seats: seq[int],
     let kind = if seat < scripted.len: scripted[seat] else: skNone
     if kind != skNone:
       result[index] = scriptedDecision(view, seat, kind)
-    elif client.disabled:
+    elif (client.disabled and not jev[seat]) or
+        (jev[seat] and client.jevEndpoint.len == 0):
       result[index] = fallbackDecision(view, seat, osFallback)
     else:
       open.add(index)
@@ -380,7 +444,15 @@ proc decideAll*(client: LlmClient, view: Sim, seats: seq[int],
   client.batchStarts.add(client.lastBatchAt)
 
   for attempt in 0 .. 1:
-    if open.len == 0 or client.disabled:
+    if client.disabled:
+      var enabled: seq[int]
+      for index in open:
+        if jev[seats[index]]:
+          enabled.add(index)
+        else:
+          result[index] = fallbackDecision(view, seats[index], osFallback)
+      open = enabled
+    if open.len == 0:
       break
     let started = epochTime()
     var stillOpen: seq[int]
@@ -396,12 +468,34 @@ proc decideAll*(client: LlmClient, view: Sim, seats: seq[int],
       for index in open:
         let seat = seats[index]
         let obs = view.buildObservation(seat)
-        var user = userPrompt(obs,
-          (if seat < prompts.len: prompts[seat] else: ""))
-        if attempt > 0:
-          user.add(RetryHint)
-        let request = client.requestFor(systemPrompt(obs), user)
-        batch.post(request.url, request.headers, request.body, $index)
+        if jev[seat]:
+          var headers: HttpHeaders
+          headers["content-type"] = "application/json"
+          if client.jevKey.len > 0:
+            headers["authorization"] = "Bearer " & client.jevKey
+          else:
+            headers["x-coworld-player-slot"] = $seat
+          if client.jevTrajectoryId.len > 0:
+            headers["x-metta-trajectory-id"] =
+              client.jevTrajectoryId & "-" & $seat
+          let body = %*{
+            "model": client.jevModel,
+            "state": systemPrompt(obs) & "\n\n" &
+              userPrompt(obs, prompts[seat]),
+            "questions": {"decision": {
+              "type": "choice",
+              "instructions": "Choose the intent that gives you the best long-run score against this opponent. Balance your own score, retaliation, and the remaining beats.",
+              "criteria": jevCriteria()
+            }}
+          }
+          batch.post(client.jevEndpoint & "/v1/systemone", headers,
+            $body, $index)
+        else:
+          var user = userPrompt(obs, prompts[seat])
+          if attempt > 0:
+            user.add(RetryHint)
+          let request = client.requestFor(systemPrompt(obs), user)
+          batch.post(request.url, request.headers, request.body, $index)
       let responses = client.curl.makeRequests(batch, client.timeoutSeconds)
       let latency = int((epochTime() - started) * 1000.0)
       for position, index in open:
@@ -409,10 +503,19 @@ proc decideAll*(client: LlmClient, view: Sim, seats: seq[int],
         try:
           if position >= responses.len:
             raise newException(CoinsError, "no response for seat " & $seat)
-          let text = client.textOf(responses[position].response,
-            responses[position].error, batch[position].url)
-          var decision = parseDecision(extractJsonObject(text))
-          decision.source = if attempt == 0: osLlm else: osRetry
+          var decision: Decision
+          if jev[seat]:
+            let response = responses[position].response
+            let error = responses[position].error
+            if error.len > 0 or response.code < 200 or response.code >= 300:
+              raise newException(CoinsError, "Jev transport failed: " &
+                error & " HTTP " & $response.code)
+            decision = jevDecision(parseJson(response.body), jevCriteria())
+          else:
+            let text = client.textOf(responses[position].response,
+              responses[position].error, batch[position].url)
+            decision = parseDecision(extractJsonObject(text))
+            decision.source = if attempt == 0: osLlm else: osRetry
           decision.latencyMs = latency
           result[index] = decision
         except CatchableError as error:
