@@ -422,6 +422,7 @@ proc globalUpgradeHandler(request: Request) {.gcsafe.} =
 proc handleRegister(slot: int, payload: JsonNode) =
   var prompt = payload{"prompt"}.getStr()
   let jev = payload{"jev"}.getBool()
+  let llm = payload{"llm"}.getBool()
   if prompt.runeLen > MaxPromptRunes:
     prompt = prompt.runeSubStr(0, MaxPromptRunes)
   let node = payload{"scripted"}
@@ -438,9 +439,10 @@ proc handleRegister(slot: int, payload: JsonNode) =
     echo "coins: slot ", slot, " registered scripted=\"", node.getStr(),
       "\", which is not one of ", ScriptedNames,
       " — this seat is treated as an LLM seat"
-  if jev and kind != skNone:
-    raise newException(CoinsError, "Jev and scripted cannot both be selected")
-  if prompt.strip().len == 0 and kind == skNone and not jev:
+  if (jev and llm) or ((jev or llm) and kind != skNone):
+    raise newException(CoinsError,
+      "select exactly one of Jev, Claude, and scripted")
+  if prompt.strip().len == 0 and kind == skNone and not jev and not llm:
     ## Registered with neither field: play the default baseline.
     kind = skReciprocator
   var policy = payload{"policy"}.getStr()
@@ -457,6 +459,7 @@ proc handleRegister(slot: int, payload: JsonNode) =
   echo "coins: slot ", slot, " registered (", prompt.len, " prompt chars",
     (if kind != skNone: ", scripted " & $kind
      elif jev: ", Jev"
+     elif llm: ", Claude"
      else: ", llm"), ")"
 
 proc websocketHandler(websocket: WebSocket, event: WebSocketEvent,

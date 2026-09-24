@@ -338,6 +338,9 @@ proc textOf(client: LlmClient, response: Response, error, url: string):
     raise newException(CoinsError, "llm error " & $response.code & ": " &
       response.body[0 .. min(response.body.high, 300)])
   let payload = parseJson(response.body)
+  echo "coins llm: model ", payload{"model"}.getStr(),
+    " input_tokens ", payload["usage"]{"input_tokens"}.getInt(),
+    " output_tokens ", payload["usage"]{"output_tokens"}.getInt()
   if payload{"stop_reason"}.getStr() == "refusal":
     raise newException(CoinsError, "llm refusal")
   for contentBlock in payload["content"]:

@@ -55,6 +55,11 @@ hosted Bedrock sidecar, `METTA_CAPTURE_URL` with `METTA_CAPTURE_KEY`, or a
 direct `TYPESAFE_API_KEY`, in that order. A missing Jev route falls back to
 the scripted reciprocator.
 
+Set `PLAYER_LLM=1` to use Claude with an intentionally blank `PLAYER_PROMPT`.
+Without that flag, an unset prompt supplies the built-in restraint strategy;
+a whitespace-only prompt selects the scripted fallback. The matched local
+pilot gives Jev and Claude the same empty operator guidance.
+
 `/bin/coins-player` is a thin process: it connects, delivers its policy selection, and
 then only listens. **Every decision is made inside the game container**, which
 is what makes one parallel batch per beat possible — both seats decide
