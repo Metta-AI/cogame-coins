@@ -36,10 +36,14 @@ when isMainModule:
   let url = getEnv("COWORLD_PLAYER_WS_URL")
   if url.len == 0:
     quit("COWORLD_PLAYER_WS_URL is not set", 1)
+  let jev = getEnv("PLAYER_JEV") == "1"
+  let llm = getEnv("PLAYER_LLM") == "1"
   var prompt = getEnv("PLAYER_PROMPT")
-  if prompt.len == 0:
+  if prompt.len == 0 and not jev and not llm:
     prompt = DefaultPrompt
   let scripted = getEnv("PLAYER_SCRIPTED").strip()
+  if (jev and llm) or ((jev or llm) and scripted.len > 0):
+    quit("select exactly one of PLAYER_JEV, PLAYER_LLM, and PLAYER_SCRIPTED", 1)
   var policy = getEnv("COWORLD_POLICY_NAME").strip()
   if policy.len == 0:
     policy = getEnv("PLAYER_NAME").strip()
@@ -54,13 +58,17 @@ when isMainModule:
 
   proc promptFrame(): string =
     $ %*{"type": "prompt", "prompt": prompt, "scripted": scripted,
+         "jev": jev, "llm": llm,
          "policy": policy}
 
   echo "coins player: connecting to game"
   let socket = newWebSocket(url)
   socket.send(promptFrame())
   echo "coins player: prompt delivered (", prompt.len, " chars",
-    (if scripted.len > 0: ", scripted " & scripted else: ""), ")"
+    (if scripted.len > 0: ", scripted " & scripted
+     elif jev: ", Jev"
+     elif llm: ", Claude"
+     else: ""), ")"
 
   ## The receive loop is wrapped so a closed or truncated frame exits 0 (the
   ## raid learning): whisky's `receiveMessage` RAISES on a close frame, and

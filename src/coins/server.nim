@@ -37,6 +37,7 @@ type
   ServerState = object
     prompts: seq[string]
     scripted: seq[ScriptKind]
+    jev: seq[bool]
     policies: seq[string]
     registered: seq[bool]
     everRegistered: seq[bool]
@@ -237,7 +238,9 @@ proc runGame(cfg: RuntimeConfig) {.gcsafe.} =
           ## `reciprocator` for every remaining beat.
           shared.scripted[slot] = skReciprocator
         gameSim.policyKinds[slot] =
-          if shared.scripted[slot] != skNone: "scripted" else: "llm"
+          if shared.scripted[slot] != skNone: "scripted"
+          elif shared.jev[slot]: "jev"
+          else: "llm"
         if shared.policies[slot].len > 0:
           gameSim.policyNames[slot] = shared.policies[slot]
       echo "coins: starting with ", connectedCount, "/", shared.seats,
@@ -265,16 +268,18 @@ proc runGame(cfg: RuntimeConfig) {.gcsafe.} =
     proc decide(view: Sim, seats: seq[int]): seq[Decision] {.closure.} =
       var prompts: seq[string]
       var kinds: seq[ScriptKind]
+      var jev: seq[bool]
       withLock stateLock:
         prompts = shared.prompts
         kinds = shared.scripted
+        jev = shared.jev
         for slot in 0 ..< Seats:
           if not shared.playerSockets.hasKey(slot) and
               kinds[slot] == skNone:
             ## Disconnected mid-episode: play the reciprocator baseline for
             ## every remaining beat. The episode never waits on it.
             kinds[slot] = skReciprocator
-      client.decideAll(view, seats, prompts, kinds,
+      client.decideAll(view, seats, prompts, kinds, jev,
         proc (seconds: float) {.closure.} = sleep(int(seconds * 1000.0)))
 
     proc onBeat(view: Sim) {.closure.} =
@@ -416,6 +421,8 @@ proc globalUpgradeHandler(request: Request) {.gcsafe.} =
 
 proc handleRegister(slot: int, payload: JsonNode) =
   var prompt = payload{"prompt"}.getStr()
+  let jev = payload{"jev"}.getBool()
+  let llm = payload{"llm"}.getBool()
   if prompt.runeLen > MaxPromptRunes:
     prompt = prompt.runeSubStr(0, MaxPromptRunes)
   let node = payload{"scripted"}
@@ -432,7 +439,10 @@ proc handleRegister(slot: int, payload: JsonNode) =
     echo "coins: slot ", slot, " registered scripted=\"", node.getStr(),
       "\", which is not one of ", ScriptedNames,
       " — this seat is treated as an LLM seat"
-  if prompt.strip().len == 0 and kind == skNone:
+  if (jev and llm) or ((jev or llm) and kind != skNone):
+    raise newException(CoinsError,
+      "select exactly one of Jev, Claude, and scripted")
+  if prompt.strip().len == 0 and kind == skNone and not jev and not llm:
     ## Registered with neither field: play the default baseline.
     kind = skReciprocator
   var policy = payload{"policy"}.getStr()
@@ -441,12 +451,16 @@ proc handleRegister(slot: int, payload: JsonNode) =
   withLock stateLock:
     shared.prompts[slot] = prompt
     shared.scripted[slot] = kind
+    shared.jev[slot] = jev
     if policy.len > 0:
       shared.policies[slot] = policy
     shared.registered[slot] = true
     shared.everRegistered[slot] = true
   echo "coins: slot ", slot, " registered (", prompt.len, " prompt chars",
-    (if kind != skNone: ", scripted " & $kind else: ", llm"), ")"
+    (if kind != skNone: ", scripted " & $kind
+     elif jev: ", Jev"
+     elif llm: ", Claude"
+     else: ", llm"), ")"
 
 proc websocketHandler(websocket: WebSocket, event: WebSocketEvent,
     message: Message) {.gcsafe.} =
@@ -518,6 +532,7 @@ proc runGameServer*(config: GameConfig, cfg: RuntimeConfig) =
   shared.seats = config.numAgents
   shared.prompts = newSeq[string](shared.seats)
   shared.scripted = newSeq[ScriptKind](shared.seats)
+  shared.jev = newSeq[bool](shared.seats)
   shared.policies = newSeq[string](shared.seats)
   shared.registered = newSeq[bool](shared.seats)
   shared.everRegistered = newSeq[bool](shared.seats)
