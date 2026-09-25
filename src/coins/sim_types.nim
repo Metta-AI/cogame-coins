@@ -89,7 +89,7 @@ type
 
   OrderSource* = enum
     osLlm = "llm"
-    osJev = "jev"
+    osExternal = "external"
     osRetry = "retry"
     osFallback = "fallback"
     osScripted = "scripted"

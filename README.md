@@ -26,7 +26,7 @@ Higher score wins. Scores are whole integers and can go negative.
 
 ## Prompt, Jev, and scripted policies
 
-Both policy kinds ship in **one image**, env-switched:
+The image supports prompt, scripted, and external action policies:
 
 ```bash
 coworld upload-policy <coins-image> --name my-coins \
@@ -46,25 +46,23 @@ coworld upload-policy <coins-image> --name my-coins-jev \
   --run /bin/coins-player --env PLAYER_JEV=1
 ```
 
-The game server sends Jev the seat's current observation and ranks the five
-legal intents. It applies the highest-probability intent after validating the
-entire probability set. The replay labels these orders `source: "jev"`. Jev
-does not write the spectator `say` field or private `notes`; this pilot tests
-visible restraint and retaliation through movement. The server uses its
-hosted Bedrock sidecar, `METTA_CAPTURE_URL` with `METTA_CAPTURE_KEY`, or a
-direct `TYPESAFE_API_KEY`, in that order. A missing Jev route falls back to
-the scripted reciprocator.
+The game sends the player's seat-private observation and accepts an ordinary
+intent action. The Jev player ranks the five intents and submits its choice.
+The game validates the action and records `source: "external"` in the replay.
+Jev does not write spectator `say` or private `notes` in this pilot. The
+player uses its Bedrock sidecar, `METTA_CAPTURE_URL` with `METTA_CAPTURE_KEY`,
+or `TYPESAFE_API_KEY`, in that order. Without a model route it registers the
+scripted reciprocator.
 
 Set `PLAYER_LLM=1` to use Claude with an intentionally blank `PLAYER_PROMPT`.
 Without that flag, an unset prompt supplies the built-in restraint strategy;
 a whitespace-only prompt selects the scripted fallback. The matched local
 pilot gives Jev and Claude the same empty operator guidance.
 
-`/bin/coins-player` is a thin process: it connects, delivers its policy selection, and
-then only listens. **Every decision is made inside the game container**, which
-is what makes one parallel batch per beat possible — both seats decide
-*simultaneously*, so both requests go out together (`curly.makeRequests`),
-never one seat waiting on the other.
+Prompt and scripted policies retain their existing registration path. External
+policies receive a `coins.player.v2` observation frame for each beat and reply
+with an action frame. The game resolves both seats' decisions at the same beat
+boundary, then owns movement, scoring, results, and replay.
 
 ### One intent per beat
 

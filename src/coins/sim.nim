@@ -490,7 +490,7 @@ proc buildObservation*(sim: Sim, slot: int): JsonNode =
       "score": [record.score[slot], record.score[other]]
     })
   %*{
-    "type": "state", "protocol": "coins.player.v1", "slot": slot,
+    "type": "state", "protocol": "coins.player.v2", "slot": slot,
     "alias": Aliases[slot], "colour": $OwnColour[slot],
     "beat": sim.beat, "minBeats": sim.config.minBeats,
     "maxBeats": sim.config.maxBeats,

@@ -16,11 +16,10 @@
 ##
 ## Both `/client/` routes are registered BEFORE any catch-all asset route.
 ##
-## Decisions are made HERE, not in the player container: the Bedrock sidecar
-## credentials and the `anthropic_api_key` secret are injected into the GAME
-## pod, and "one parallel batch per beat" is a game-server property.
+## Prompt adapters batch game-hosted model calls. External policies receive
+## seat-private observations and submit ordinary intent actions.
 
-import std/[json, locks, os, sets, strutils, tables, times, unicode]
+import std/[json, locks, os, sequtils, sets, strutils, tables, times, unicode]
 import bitworld/runtime
 import bitworld/spriteprotocol
 import curly
@@ -30,14 +29,16 @@ import sim_types, sim, scripted, llm, broadcast, global, replays,
   wire_constants
 
 const
-  PlayerProtocol = "coins.player.v1"
+  PlayerProtocol = "coins.player.v2"
   DoneBroadcastSeconds = 3.0
 
 type
   ServerState = object
     prompts: seq[string]
     scripted: seq[ScriptKind]
-    jev: seq[bool]
+    external: seq[bool]
+    decisionId: int
+    pendingActions: seq[JsonNode]
     policies: seq[string]
     registered: seq[bool]
     everRegistered: seq[bool]
@@ -239,7 +240,7 @@ proc runGame(cfg: RuntimeConfig) {.gcsafe.} =
           shared.scripted[slot] = skReciprocator
         gameSim.policyKinds[slot] =
           if shared.scripted[slot] != skNone: "scripted"
-          elif shared.jev[slot]: "jev"
+          elif shared.external[slot]: "external"
           else: "llm"
         if shared.policies[slot].len > 0:
           gameSim.policyNames[slot] = shared.policies[slot]
@@ -265,22 +266,63 @@ proc runGame(cfg: RuntimeConfig) {.gcsafe.} =
 
     proc now(): float {.closure.} = epochTime() - gameStart
 
+    var lastExternalAt = -1.0
     proc decide(view: Sim, seats: seq[int]): seq[Decision] {.closure.} =
       var prompts: seq[string]
       var kinds: seq[ScriptKind]
-      var jev: seq[bool]
+      var external: seq[bool]
+      var decisionId: int
       withLock stateLock:
         prompts = shared.prompts
         kinds = shared.scripted
-        jev = shared.jev
+        external = shared.external
         for slot in 0 ..< Seats:
           if not shared.playerSockets.hasKey(slot) and
               kinds[slot] == skNone:
             ## Disconnected mid-episode: play the reciprocator baseline for
             ## every remaining beat. The episode never waits on it.
             kinds[slot] = skReciprocator
-      client.decideAll(view, seats, prompts, kinds, jev,
+          if external[slot]:
+            kinds[slot] = skReciprocator
+      if external.anyIt(it):
+        if lastExternalAt >= 0 and
+            now() - lastExternalAt < config.minBeatSeconds.float:
+          sleep(int((config.minBeatSeconds.float -
+            (now() - lastExternalAt)) * 1000))
+        lastExternalAt = now()
+      withLock stateLock:
+        inc shared.decisionId
+        decisionId = shared.decisionId
+        shared.pendingActions = newSeq[JsonNode](shared.seats)
+        for seat in seats:
+          if external[seat] and shared.playerSockets.hasKey(seat):
+            shared.playerSockets[seat].send($ %*{
+              "type": "observation", "id": decisionId,
+              "observation": view.buildObservation(seat)})
+      result = client.decideAll(view, seats, prompts, kinds,
         proc (seconds: float) {.closure.} = sleep(int(seconds * 1000.0)))
+      if external.anyIt(it):
+        let started = epochTime()
+        let deadline = started + config.llmTimeoutSeconds.float
+        while epochTime() < deadline:
+          var ready = true
+          withLock stateLock:
+            for seat in seats:
+              if external[seat] and shared.playerSockets.hasKey(seat) and
+                  shared.pendingActions[seat].isNil:
+                ready = false
+          if ready:
+            break
+          sleep(20)
+        for index, seat in seats:
+          if external[seat]:
+            var action: JsonNode
+            withLock stateLock:
+              action = shared.pendingActions[seat]
+            if not action.isNil:
+              result[index] = parseDecision(action)
+              result[index].source = osExternal
+              result[index].latencyMs = int((epochTime() - started) * 1000)
 
     proc onBeat(view: Sim) {.closure.} =
       withLock stateLock:
@@ -421,8 +463,6 @@ proc globalUpgradeHandler(request: Request) {.gcsafe.} =
 
 proc handleRegister(slot: int, payload: JsonNode) =
   var prompt = payload{"prompt"}.getStr()
-  let jev = payload{"jev"}.getBool()
-  let llm = payload{"llm"}.getBool()
   if prompt.runeLen > MaxPromptRunes:
     prompt = prompt.runeSubStr(0, MaxPromptRunes)
   let node = payload{"scripted"}
@@ -439,10 +479,7 @@ proc handleRegister(slot: int, payload: JsonNode) =
     echo "coins: slot ", slot, " registered scripted=\"", node.getStr(),
       "\", which is not one of ", ScriptedNames,
       " — this seat is treated as an LLM seat"
-  if (jev and llm) or ((jev or llm) and kind != skNone):
-    raise newException(CoinsError,
-      "select exactly one of Jev, Claude, and scripted")
-  if prompt.strip().len == 0 and kind == skNone and not jev and not llm:
+  if prompt.strip().len == 0 and kind == skNone:
     ## Registered with neither field: play the default baseline.
     kind = skReciprocator
   var policy = payload{"policy"}.getStr()
@@ -451,16 +488,13 @@ proc handleRegister(slot: int, payload: JsonNode) =
   withLock stateLock:
     shared.prompts[slot] = prompt
     shared.scripted[slot] = kind
-    shared.jev[slot] = jev
+    shared.external[slot] = false
     if policy.len > 0:
       shared.policies[slot] = policy
     shared.registered[slot] = true
     shared.everRegistered[slot] = true
   echo "coins: slot ", slot, " registered (", prompt.len, " prompt chars",
-    (if kind != skNone: ", scripted " & $kind
-     elif jev: ", Jev"
-     elif llm: ", Claude"
-     else: ", llm"), ")"
+    (if kind != skNone: ", scripted " & $kind else: ", llm"), ")"
 
 proc websocketHandler(websocket: WebSocket, event: WebSocketEvent,
     message: Message) {.gcsafe.} =
@@ -491,6 +525,27 @@ proc websocketHandler(websocket: WebSocket, event: WebSocketEvent,
         return
       try:
         let payload = parseJson(message.data)
+        if payload{"type"}.getStr() == "register":
+          if payload["control"].getStr() != "external":
+            raise newException(CoinsError, "unknown player control")
+          var policy = payload{"policy"}.getStr()
+          if policy.runeLen > MaxPolicyLabelRunes:
+            policy = policy.runeSubStr(0, MaxPolicyLabelRunes)
+          withLock stateLock:
+            shared.external[slot] = true
+            if policy.len > 0:
+              shared.policies[slot] = policy
+            shared.registered[slot] = true
+            shared.everRegistered[slot] = true
+          return
+        if payload{"type"}.getStr() == "action":
+          let action = payload["action"]
+          discard parseDecision(action)
+          withLock stateLock:
+            if shared.external[slot] and payload["id"].getInt() ==
+                shared.decisionId and shared.pendingActions[slot].isNil:
+              shared.pendingActions[slot] = action
+          return
         if payload{"type"}.getStr() != "prompt":
           echo "coins: ignoring player frame of type ",
             payload{"type"}.getStr()
@@ -532,7 +587,8 @@ proc runGameServer*(config: GameConfig, cfg: RuntimeConfig) =
   shared.seats = config.numAgents
   shared.prompts = newSeq[string](shared.seats)
   shared.scripted = newSeq[ScriptKind](shared.seats)
-  shared.jev = newSeq[bool](shared.seats)
+  shared.external = newSeq[bool](shared.seats)
+  shared.pendingActions = newSeq[JsonNode](shared.seats)
   shared.policies = newSeq[string](shared.seats)
   shared.registered = newSeq[bool](shared.seats)
   shared.everRegistered = newSeq[bool](shared.seats)
