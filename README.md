@@ -24,7 +24,7 @@ It is a spatial repeated Prisoner's Dilemma, ported from Melting Pot's
 
 Higher score wins. Scores are whole integers and can go negative.
 
-## Prompt, Jev, and scripted policies
+## Prompt, scripted, and external policies
 
 The image supports prompt, scripted, and external action policies:
 
@@ -39,25 +39,14 @@ coworld upload-policy <coins-image> --name my-coins \
 as a built-in baseline instead; the game plays those deterministically with no
 LLM at all.
 
-For a Jev System One policy, register the same player image with `PLAYER_JEV=1`:
-
-```bash
-coworld upload-policy <coins-image> --name my-coins-jev \
-  --run /bin/coins-player --env PLAYER_JEV=1
-```
-
 The game sends the player's seat-private observation and accepts an ordinary
-intent action. The Jev player ranks the five intents and submits its choice.
-The game validates the action and records `source: "external"` in the replay.
-Jev does not write spectator `say` or private `notes` in this pilot. The
-player uses its Bedrock sidecar, `METTA_CAPTURE_URL` with `METTA_CAPTURE_KEY`,
-or `TYPESAFE_API_KEY`, in that order. Without a model route it registers the
-scripted reciprocator.
+intent action from an external player. The game validates that action and
+records `source: "external"` in the replay.
 
 Set `PLAYER_LLM=1` to use Claude with an intentionally blank `PLAYER_PROMPT`.
 Without that flag, an unset prompt supplies the built-in restraint strategy;
 a whitespace-only prompt selects the scripted fallback. The matched local
-pilot gives Jev and Claude the same empty operator guidance.
+pilot can give external policies and Claude the same empty operator guidance.
 
 Prompt and scripted policies retain their existing registration path. External
 policies receive a `coins.player.v2` observation frame for each beat and reply
