@@ -1,7 +1,6 @@
-## Coins player: prompt, scripted, or external action policy.
+## Coins player: prompt or scripted policy.
 ##
 ## Prompt and scripted seats retain the original registration protocol.
-## External seats receive observations and submit actions over the same socket.
 ##
 ## `PLAYER_SCRIPTED=honest|greedy|reciprocator|tit-for-tat` registers the
 ## seat as a built-in baseline instead; the server plays those
@@ -14,7 +13,6 @@
 
 import
   std/[json, options, os, strutils],
-  coins/jev_policy,
   whisky
 
 const DefaultPrompt = """
@@ -34,18 +32,13 @@ when isMainModule:
   let url = getEnv("COWORLD_PLAYER_WS_URL")
   if url.len == 0:
     quit("COWORLD_PLAYER_WS_URL is not set", 1)
-  let jevRequested = getEnv("PLAYER_JEV") == "1"
   let llm = getEnv("PLAYER_LLM") == "1"
-  let jev = jevRequested and (
-    getEnv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME").strip().len > 0 or
-    getEnv("METTA_CAPTURE_URL").strip().len > 0 or
-    getEnv("TYPESAFE_API_KEY").strip().len > 0)
   var prompt = getEnv("PLAYER_PROMPT")
-  if prompt.strip().len == 0 and not jev:
+  if prompt.strip().len == 0:
     prompt = DefaultPrompt
   let scripted = getEnv("PLAYER_SCRIPTED").strip()
-  if (jevRequested and llm) or ((jevRequested or llm) and scripted.len > 0):
-    quit("select exactly one of PLAYER_JEV, PLAYER_LLM, and PLAYER_SCRIPTED", 1)
+  if llm and scripted.len > 0:
+    quit("select one of PLAYER_LLM and PLAYER_SCRIPTED", 1)
   var policy = getEnv("COWORLD_POLICY_NAME").strip()
   if policy.len == 0:
     policy = getEnv("PLAYER_NAME").strip()
@@ -59,10 +52,8 @@ when isMainModule:
       else: "coins-player"
 
   proc promptFrame(): string =
-    if jev: $ %*{"type": "register", "control": "external",
-      "policy": policy}
-    else: $ %*{"type": "prompt", "prompt": prompt,
-      "scripted": (if jevRequested: "reciprocator" else: scripted),
+    $ %*{"type": "prompt", "prompt": prompt,
+      "scripted": scripted,
       "policy": policy}
 
   echo "coins player: connecting to game"
@@ -70,7 +61,6 @@ when isMainModule:
   socket.send(promptFrame())
   echo "coins player: prompt delivered (", prompt.len, " chars",
     (if scripted.len > 0: ", scripted " & scripted
-     elif jev: ", Jev"
      elif llm: ", Claude"
      else: ""), ")"
 
@@ -100,11 +90,6 @@ when isMainModule:
         socket.send(promptFrame())
       of "state":
         discard
-      of "observation":
-        if jev:
-          let action = chooseAction(payload["observation"])
-          socket.send($ %*{"type": "action", "id": payload["id"],
-            "action": action})
       of "final":
         echo "coins player: final scores ", payload{"scores"},
           " reason ", payload{"reason"}.getStr()
