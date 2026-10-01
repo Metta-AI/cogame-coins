@@ -1,12 +1,3 @@
-## tests/test_manifest.nim — packaging.
-##
-## `num_agents == 2` in ALL FIVE variants and in `certification.game_config`;
-## the image placeholder derived from `compose.yaml`'s service name; the
-## static replay bundle and no `/client/replay` viewer; docs and protocols in
-## the shapes the platform validator demands; the secret URI on the game
-## runnable; every array property in `config_schema` bounded; every declared
-## `player[]` id seated in the certification fixture; a description on every
-## variant; and the wall-clock budget, checked from the manifest itself.
 
 import std/[json, os, strutils]
 import coins/[sim_types, sim_config]
@@ -114,11 +105,8 @@ check("/client/replay" notin manifestText,
 echo "--- the game runnable"
 let runnable = manifest{"game"}{"runnable"}
 check(runnable{"type"}.getStr() == "game", "game.runnable.type == 'game'")
-check(runnable{"env"}{"ANTHROPIC_API_KEY_URI"}.getStr() ==
-  "secret://coworld/coins/anthropic_api_key",
-  "ANTHROPIC_API_KEY_URI is on the GAME runnable — without it the hosted " &
-  "game container never sees the coworld secret and every league episode " &
-  "silently plays scripted")
+doAssert runnable{"env"}{"ANTHROPIC_API_KEY_URI"}.isNil,
+  "hosted LLM uses the platform sidecar without provider secrets"
 check(runnable{"run"}[0].getStr() == "/bin/coins", "the game entrypoint")
 check(manifest{"game"}{"name"}.getStr() == "coins",
   "game.name is the secret namespace")
