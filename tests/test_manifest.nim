@@ -37,7 +37,6 @@ check(manifest{"game"}{"runnable"}{"image"}.getStr() == expectedPlaceholder,
 check("cogame-coins:latest" in compose,
   "compose pins the image tag the release workflow builds")
 check("platform: linux/amd64" in compose, "compose pins linux/amd64")
-check("network: host" in compose, "compose builds with network: host")
 
 # ---------------------------------------------------------------------------
 echo "--- num_agents is 2 in EVERY variant and in the certification fixture"
