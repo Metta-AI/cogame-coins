@@ -35,6 +35,7 @@ const
 type
   ServerState = object
     prompts: seq[string]
+    promptEvidence: seq[string]
     scripted: seq[ScriptKind]
     external: seq[bool]
     decisionId: int
@@ -190,6 +191,14 @@ proc finishEpisode() =
     pushGlobalLocked(newJArray())
   sleep(500)
   echo "coins: writing results and replay (", replayData.len, " bytes)"
+  let provenance = shared.promptEvidence & @[$(%*{
+    "schema": "coins.prompt-provenance.v1", "kind": "episode", "reason": results["reason"],
+    "game_seed": gameSim.config.seed, "prompt_bank": PromptBankVersion,
+    "prompt_variant": $gameSim.config.selectedPromptVariant, "prompt_seed": gameSim.config.promptSeed,
+    "source_revision": getEnv("COWORLD_SOURCE_REVISION"), "beats": gameSim.beatsPlayed,
+    "records": shared.promptEvidence.len, "scores": results["scores"]})]
+  writeArtifact(getEnv("COGAME_SAVE_TRAJECTORY_URI"), provenance.join("\n") & "\n",
+    "application/x-ndjson", "COGAME_SAVE_TRAJECTORY_METHOD")
   writeArtifact(runtimeCfg.resultsUri, $results, "application/json",
     "COGAME_RESULTS_METHOD")
   writeArtifact(runtimeCfg.replayUri, replayData, "application/json",
@@ -296,11 +305,18 @@ proc runGame(cfg: RuntimeConfig) {.gcsafe.} =
         shared.pendingActions = newSeq[JsonNode](shared.seats)
         for seat in seats:
           if external[seat] and shared.playerSockets.hasKey(seat):
+            let observation = view.buildObservation(seat)
+            let system = systemPrompt(observation, view.config)
+            let user = userPrompt(observation, prompts[seat])
+            observation["prompt_template"] = promptMetadata(view.config, system, user)
             shared.playerSockets[seat].send($ %*{
-              "type": "observation", "id": decisionId,
-              "observation": view.buildObservation(seat)})
-      result = client.decideAll(view, seats, prompts, kinds,
+              "type": "observation", "id": decisionId, "observation": observation,
+              "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]})
+      let batch = client.decideAll(view, seats, prompts, kinds,
         proc (seconds: float) {.closure.} = sleep(int(seconds * 1000.0)))
+      result = batch.decisions
+      withLock stateLock:
+        for record in batch.promptEvidence: shared.promptEvidence.add($record)
       if external.anyIt(it):
         let started = epochTime()
         let deadline = started + config.llmTimeoutSeconds.float

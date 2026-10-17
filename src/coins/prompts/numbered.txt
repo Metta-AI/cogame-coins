@@ -1,0 +1,14 @@
+1. Identity: $1, the $2 cog. Your room has one other cog, $3 ($4).
+
+2. Movement and supply:
+$5
+3. Intent choices:
+$6
+4. Reward:
+$7
+5. Episode ending:
+$8
+6. Information: the other cog is another policy deciding simultaneously. None of your writing is read by it. Both of you can observe the other's position, score and theft counter.
+
+7. Response:
+$9
