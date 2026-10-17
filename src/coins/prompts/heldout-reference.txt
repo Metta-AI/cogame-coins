@@ -1,0 +1,14 @@
+Identity reference: $1, coloured $2. One other cog shares the small square room: $3, coloured $4.
+
+Room reference:
+$5
+Intent reference:
+$6
+Score reference:
+$7
+Ending reference:
+$8
+Visibility reference: the other cog is a separate policy deciding simultaneously. It reads none of your writing. Positions, scores and theft counters are mutually visible.
+
+Response reference:
+$9

@@ -22,7 +22,9 @@ import
   std/[json, os, strutils, times],
   bitworld/runtime,
   curly,
-  sim, scripted
+  sim, scripted, prompts
+
+export prompts
 
 const
   AnthropicUrl = "https://api.anthropic.com/v1/messages"
@@ -30,6 +32,10 @@ const
   BedrockAnthropicVersion = "bedrock-2023-05-31"
 
 type
+  DecisionBatch* = object
+    decisions*: seq[Decision]
+    promptEvidence*: seq[JsonNode] ## Prompt intent, not proof of generation.
+
   LlmTransport = enum
     ltNone, ltSidecar, ltBedrock, ltAnthropic
 
@@ -136,7 +142,7 @@ proc newLlmClient*(config: GameConfig): LlmClient =
 # prompts
 # ---------------------------------------------------------------------------
 
-proc systemPrompt*(obs: JsonNode): string =
+proc canonicalPrompt(obs: JsonNode): string =
   let alias = obs{"alias"}.getStr().toUpperAscii()
   let colour = obs{"colour"}.getStr().toUpperAscii()
   let them = obs{"them"}{"alias"}.getStr().toUpperAscii()
@@ -190,6 +196,25 @@ proc systemPrompt*(obs: JsonNode): string =
     "OUTPUT FORMAT: reply with ONLY one JSON object, nothing else — no " &
     "analysis, no explanation, no markdown fences, no text before or after " &
     "the object. Your reply must begin with the character { and end with }."
+
+proc systemPrompt*(obs: JsonNode, config: GameConfig): string =
+  let canonical = canonicalPrompt(obs)
+  if config.selectedPromptVariant == pvCanonical:
+    return canonical
+  # Keep mechanics and the current beat's ending information verbatim.
+  let markers = ["THE ROOM:", "THE BEAT:", "SCORING.",
+    "THE SHADOW OF THE FUTURE:", "THE OTHER COG", "OUTPUT FORMAT:"]
+  var offsets: array[6, int]
+  for index, marker in markers:
+    offsets[index] = canonical.find(marker)
+    doAssert offsets[index] >= 0
+    if index > 0: doAssert offsets[index] > offsets[index - 1]
+  renderVariantPrompt(config, [obs["alias"].getStr().toUpperAscii(),
+    obs["colour"].getStr().toUpperAscii(), obs["them"]["alias"].getStr().toUpperAscii(),
+    obs["them"]["colour"].getStr().toUpperAscii(),
+    canonical[offsets[0] ..< offsets[1]], canonical[offsets[1] ..< offsets[2]],
+    canonical[offsets[2] ..< offsets[3]], canonical[offsets[3] ..< offsets[4]],
+    canonical[offsets[5] .. ^1]])
 
 proc operatorBlock(prompt: string): string =
   if prompt.strip().len == 0:
@@ -369,19 +394,29 @@ proc pacedWait*(client: LlmClient, nowSeconds: float): float =
   let due = client.lastBatchAt + client.minBeatSeconds.float
   if due > nowSeconds: due - nowSeconds else: 0.0
 
+proc promptRecord(view: Sim, seat, attempt: int, scope, system, user: string): JsonNode =
+  %*{"schema": "coins.prompt-provenance.v1", "kind": "prompt", "scope": scope,
+    "seat": seat, "beat": view.beat, "attempt": attempt,
+    "prompt_template": promptMetadata(view.config, system, user),
+    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+
 proc decideAll*(client: LlmClient, view: Sim, seats: seq[int],
     prompts: seq[string], scripted: seq[ScriptKind],
-    sleepFor: proc (seconds: float) {.closure.} = nil): seq[Decision] =
-  ## One decision per seat in `seats`, in order. NEVER raises: any failure
-  ## falls back to the scripted move so the episode always advances.
-  result = newSeq[Decision](seats.len)
+    sleepFor: proc (seconds: float) {.closure.} = nil): DecisionBatch =
+  ## One decision per seat plus private prompt intent. Provider failures fall
+  ## back to reciprocator; game-owned prompt rendering errors propagate.
+  result.decisions = newSeq[Decision](seats.len)
   var open: seq[int]
   for index, seat in seats:
+    let obs = view.buildObservation(seat)
+    result.promptEvidence.add(promptRecord(view, seat, 0, "configured_prompt",
+      systemPrompt(obs, view.config),
+      userPrompt(obs, (if seat < prompts.len: prompts[seat] else: ""))))
     let kind = if seat < scripted.len: scripted[seat] else: skNone
     if kind != skNone:
-      result[index] = scriptedDecision(view, seat, kind)
+      result.decisions[index] = scriptedDecision(view, seat, kind)
     elif client.disabled:
-      result[index] = fallbackDecision(view, seat, osFallback)
+      result.decisions[index] = fallbackDecision(view, seat, osFallback)
     else:
       open.add(index)
   if open.len == 0:
@@ -415,7 +450,9 @@ proc decideAll*(client: LlmClient, view: Sim, seats: seq[int],
           (if seat < prompts.len: prompts[seat] else: ""))
         if attempt > 0:
           user.add(RetryHint)
-        let request = client.requestFor(systemPrompt(obs), user, seat)
+        let system = systemPrompt(obs, view.config)
+        result.promptEvidence.add(promptRecord(view, seat, attempt, "request", system, user))
+        let request = client.requestFor(system, user, seat)
         batch.post(request.url, request.headers, request.body, $index)
       let responses = client.curl.makeRequests(batch, client.timeoutSeconds)
       let latency = int((epochTime() - started) * 1000.0)
@@ -429,7 +466,7 @@ proc decideAll*(client: LlmClient, view: Sim, seats: seq[int],
           var decision = parseDecision(extractJsonObject(text))
           decision.source = if attempt == 0: osLlm else: osRetry
           decision.latencyMs = latency
-          result[index] = decision
+          result.decisions[index] = decision
         except CatchableError as error:
           echo "coins llm: seat ", seat, " attempt ", attempt, " failed: ",
             error.msg
@@ -441,4 +478,4 @@ proc decideAll*(client: LlmClient, view: Sim, seats: seq[int],
   for index in open:
     let seat = seats[index]
     echo "coins llm: seat ", seat, " falling back to scripted intent"
-    result[index] = fallbackDecision(view, seat, osFallback)
+    result.decisions[index] = fallbackDecision(view, seat, osFallback)

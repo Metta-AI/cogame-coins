@@ -1,0 +1,7 @@
+You are $1 ($2), sharing a small square room with one other cog, $3 ($4).
+
+$7$8
+The other cog's policy chooses simultaneously with you. Nothing you write is communicated to it. Your position, score and theft counter are visible to it, and its corresponding information is visible to you.
+
+$6$5
+$9

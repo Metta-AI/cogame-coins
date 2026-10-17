@@ -1,0 +1,14 @@
+Who are you? $1, the $2 cog, sharing a small square room with $3, the $4 cog.
+
+How does the room work?
+$5
+What can you choose?
+$6
+How do you score?
+$7
+When does play end?
+$8
+What does the other cog know? It is another policy, deciding at the same moment as you. It never reads your writing. It can see your position, score and theft counter; you can see the same information about it.
+
+How must you respond?
+$9

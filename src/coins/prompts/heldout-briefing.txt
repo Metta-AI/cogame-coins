@@ -1,0 +1,14 @@
+Briefing for $1, the $2 cog: there is one other cog in this small square room, $3 ($4).
+
+Room briefing:
+$5
+Control briefing:
+$6
+Scoring briefing:
+$7
+Duration briefing:
+$8
+Information briefing: the other cog is another policy acting at the same moment. It never reads anything you write. It observes your position, score and theft counter, and you observe its equivalent information.
+
+Reply briefing:
+$9
