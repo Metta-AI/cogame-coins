@@ -193,17 +193,17 @@ The design note this repo implements is
 
 ## Episode prompt diversity
 
-Bank `coins-rules-v1` contains five training wordings: `canonical`, `plain`,
+Bank `coins-rules-v2` contains five training wordings: `canonical`, `plain`,
 `numbered`, `questions`, and `reordered`. Set `promptVariant` to pin one,
 or use `mixed` with an explicit nonnegative integer `promptSeed`. Mixed
 selection uses `promptSeed mod 5` without consuming game randomness.
 Defaults remain canonical. Reserve `heldout-briefing` and
-`heldout-reference` for hosted evaluation; training rejects both.
+`heldout-reference` for evaluation; training rejects both.
 
 The selected template stays fixed for an episode. Rendered system text does
 not: it includes the current beat and ending information. Hash exact messages
-at every decision. Movement, scoring, room mechanics, legal intents, and the
-ending rule come verbatim from the canonical renderer. Operator strategy stays
+at every decision. Movement and scoring explanations vary. Named sections preserve room mechanics,
+ending rules, and the response contract without slicing rendered strings. Operator strategy stays
 separate. Bump the bank version when wording changes. Speech stays spectator-only;
 notes stay seat-private.
 
@@ -213,20 +213,11 @@ resolved `variant`, requested `selection`, `seed`, and exact UTF-8
 `system_sha256`/`user_sha256` hashes. Ordinary state frames, results, and
 public replays omit the new metadata and prompt records.
 
-When `COGAME_SAVE_TRAJECTORY_URI` is configured, private JSONL uses schema
-`coins.prompt-provenance.v1`. Each `kind: prompt` record carries seat,
-one-based beat, attempt, messages, and metadata. Scope `configured_prompt`
-records intended context including scripted/external seats; `request` records
-native request context including retry hints. Neither proves generation or is
-a native training trajectory. The final `kind: episode` record includes reason,
-scores, game seed, bank, selected wording, prompt seed, completed beats,
-record count, and `COWORLD_SOURCE_REVISION`. Empty revisions are unqualified.
-
 Compile `tools/train_bridge.nim` with `nim c --path:src`. Launch
 `tools/train_bridge coworld_manifest_template.json standard --language` for
 text policies. Teacher replies include intent, spectator speech, and private
 notes. Omit `--language` for the existing numeric action interface. Reset
-accepts `promptVariant` and `promptSeed`. Both interfaces attach private
+accepts `promptVariant`, `promptSeed`, and `split` (train, validation, or test). Both interfaces attach private
 metadata at `semantic_view.prompt_template`.
 
 Compile `tools/export_posttrain.nim`, then run from a clean committed checkout:
@@ -235,28 +226,18 @@ Compile `tools/export_posttrain.nim`, then run from a clean committed checkout:
 tools/export_posttrain OUTPUT 10 1 standard 0
 ```
 
-The final argument selects five consecutive prompt seeds per scenario, starting
-at that value. Omit it for canonical export. All wordings and variants share the
-family `coins-<seed>`. Seeds divisible by five enter validation; others enter
-training. Preserve that assignment when combining corpora.
-`prompt-provenance.jsonl` joins the unchanged example schema by
-`(episode_id, decision_id)`. The manifest pins source, teacher, bank, wording,
-ending reason, completed beats, and scores.
+The final argument cycles through five consecutive training wordings within the
+requested game count. Omit it for canonical export. All wordings and variants
+share the family `coins-<seed>`. Seeds divisible by five enter validation; others
+enter training. Preserve that assignment when combining corpora.
+The manifest pins source, teacher, bank, wording, ending reason, beats, and scores.
 
 Complete-flow checks use real binaries and ordinary game budgets:
 
 ```bash
 python tools/test_prompt_variants.py /absolute/path/to/bridge
-python tools/test_prompt_socket_games.py /absolute/path/to/game /new/private/output SOURCE_REVISION
-python tools/test_prompt_socket_games.py /absolute/path/to/game /new/private/output SOURCE_REVISION --native-failure
 python tools/test_prompt_export.py /absolute/path/to/export /new/private/output
 ```
-
-Pass the original bridge as a second argument to the variant check for canonical
-byte parity. Socket checks disable providers; native failure cases use a closed
-localhost port to exercise retries and reciprocator fallback. Checks wait for
-final frames and artifacts, then stop their own server during its unchanged
-shutdown grace. Docker CI separately checks natural exit.
 
 For a model study, freeze source, model, operator strategy, variants, game seeds,
 seats, opponents, and budgets before comparing canonical-trained and mixed-trained

@@ -3,9 +3,24 @@
 2. Movement and supply:
 $5
 3. Intent choices:
-$6
+Beat decisions:
+1. Every $11 ticks, choose one intent; a deterministic kernel walks your cog throughout that beat.
+2. take_mine: nearest $2 coin; never step on $4.
+3. take_any: nearest coin of either colour, own colour breaking ties; neither colour is forbidden.
+4. take_theirs: nearest $4 coin; neither colour is forbidden.
+5. guard: the $2 coin nearest $3; never step on $4.
+6. hold: stay still; never step on $4.
+7. These prohibitions apply to stepping, not merely pickup. $3 can see you walk around forbidden coins.
+
+
 4. Reward:
-$7
+Score rules:
+1. Any pickup gives you +1.
+2. A $4 pickup additionally costs your opponent $10; your +1 remains.
+3. Your score equals pickups minus $10 times your-colour coins taken by the opponent.
+4. Higher is better; negative totals are possible.
+
+
 5. Episode ending:
 $8
 6. Information: the other cog is another policy deciding simultaneously. None of your writing is read by it. Both of you can observe the other's position, score and theft counter.

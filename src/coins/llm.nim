@@ -32,10 +32,6 @@ const
   BedrockAnthropicVersion = "bedrock-2023-05-31"
 
 type
-  DecisionBatch* = object
-    decisions*: seq[Decision]
-    promptEvidence*: seq[JsonNode] ## Prompt intent, not proof of generation.
-
   LlmTransport = enum
     ltNone, ltSidecar, ltBedrock, ltAnthropic
 
@@ -142,7 +138,7 @@ proc newLlmClient*(config: GameConfig): LlmClient =
 # prompts
 # ---------------------------------------------------------------------------
 
-proc canonicalPrompt(obs: JsonNode): string =
+proc systemPrompt*(obs: JsonNode, config: GameConfig): string =
   let alias = obs{"alias"}.getStr().toUpperAscii()
   let colour = obs{"colour"}.getStr().toUpperAscii()
   let them = obs{"them"}{"alias"}.getStr().toUpperAscii()
@@ -153,9 +149,10 @@ proc canonicalPrompt(obs: JsonNode): string =
   let maxBeats = obs{"maxBeats"}.getInt()
   let permille = obs{"endChancePermille"}.getInt()
   let penalty = rules{"theftPenalty"}.getInt()
-  result =
+  let introduction =
     "You are " & alias & ", the " & colour & " cog, in a small square room " &
-    "with one other cog, " & them & " (" & theirColour & ").\n\n" &
+    "with one other cog, " & them & " (" & theirColour & ").\n\n"
+  let room =
     "THE ROOM: a 7x7 open floor inside a wall ring. Moves are 4-way (north, " &
     "east, south, west); there are no diagonals. After every step you wait " &
     $rules{"stepCooldownTicks"}.getInt() & " ticks before you can step " &
@@ -163,7 +160,8 @@ proc canonicalPrompt(obs: JsonNode): string =
     $rules{"coinSpawnIntervalTicks"}.getInt() & " ticks while fewer than " &
     $rules{"coinCap"}.getInt() & " are on the board. The room is " &
     "deliberately coin-starved — supply, not walking speed, is what limits " &
-    "you.\n\n" &
+    "you.\n\n"
+  let beatRules =
     "THE BEAT: you do not steer tick by tick. Once per BEAT of " &
     $obs{"ticksPerBeat"}.getInt() & " ticks you choose ONE intent, and a " &
     "deterministic kernel walks your cog for the whole beat:\n" &
@@ -179,42 +177,32 @@ proc canonicalPrompt(obs: JsonNode): string =
     "- hold: stand still. You will NOT step onto a " & theirColour & " coin.\n" &
     "RESTRAINT IS A MOVEMENT RULE, NOT A PICKUP RULE: an intent that forbids " &
     "a colour never steps onto a coin of that colour, so " & them & " can " &
-    "literally watch you walk around its coins.\n\n" &
+    "literally watch you walk around its coins.\n\n"
+  let scoring =
     "SCORING. Every coin you pick up is +1 to you, whatever its colour. If " &
     "the coin was " & theirColour & " — your opponent's colour — your " &
     "opponent additionally loses " & $penalty & ". You keep the +1 either " &
     "way. Your score is `pickups - " & $penalty & " x (coins of your colour " &
-    "your opponent took)`. Higher is better. Scores can go negative.\n\n" &
+    "your opponent took)`. Higher is better. Scores can go negative.\n\n"
+  let ending =
     "THE SHADOW OF THE FUTURE: the episode has run " & $beat & " beats; from " &
     "beat " & $minBeats & " on, each beat close ends it with probability " &
     formatFloat(permille.float / 1000.0, ffDecimal, 3) & ", and it always " &
     "ends by beat " & $maxBeats & " — so on average there are several beats " &
-    "left, and you will meet this cog again in each of them.\n\n" &
+    "left, and you will meet this cog again in each of them.\n\n"
+  let opponent =
     "THE OTHER COG is another policy deciding AT THE SAME MOMENT as you. " &
     "Nothing you write is ever read by it. It can see your position, your " &
-    "score and your theft counter exactly as you can see its own.\n\n" &
+    "score and your theft counter exactly as you can see its own.\n\n"
+  let output =
     "OUTPUT FORMAT: reply with ONLY one JSON object, nothing else — no " &
     "analysis, no explanation, no markdown fences, no text before or after " &
     "the object. Your reply must begin with the character { and end with }."
 
-proc systemPrompt*(obs: JsonNode, config: GameConfig): string =
-  let canonical = canonicalPrompt(obs)
   if config.selectedPromptVariant == pvCanonical:
-    return canonical
-  # Keep mechanics and the current beat's ending information verbatim.
-  let markers = ["THE ROOM:", "THE BEAT:", "SCORING.",
-    "THE SHADOW OF THE FUTURE:", "THE OTHER COG", "OUTPUT FORMAT:"]
-  var offsets: array[6, int]
-  for index, marker in markers:
-    offsets[index] = canonical.find(marker)
-    doAssert offsets[index] >= 0
-    if index > 0: doAssert offsets[index] > offsets[index - 1]
-  renderVariantPrompt(config, [obs["alias"].getStr().toUpperAscii(),
-    obs["colour"].getStr().toUpperAscii(), obs["them"]["alias"].getStr().toUpperAscii(),
-    obs["them"]["colour"].getStr().toUpperAscii(),
-    canonical[offsets[0] ..< offsets[1]], canonical[offsets[1] ..< offsets[2]],
-    canonical[offsets[2] ..< offsets[3]], canonical[offsets[3] ..< offsets[4]],
-    canonical[offsets[5] .. ^1]])
+    return introduction & room & beatRules & scoring & ending & opponent & output
+  renderVariantPrompt(config, [alias, colour, them, theirColour, room, beatRules,
+    scoring, ending, output, $penalty, $obs{"ticksPerBeat"}.getInt()])
 
 proc operatorBlock(prompt: string): string =
   if prompt.strip().len == 0:
@@ -394,29 +382,19 @@ proc pacedWait*(client: LlmClient, nowSeconds: float): float =
   let due = client.lastBatchAt + client.minBeatSeconds.float
   if due > nowSeconds: due - nowSeconds else: 0.0
 
-proc promptRecord(view: Sim, seat, attempt: int, scope, system, user: string): JsonNode =
-  %*{"schema": "coins.prompt-provenance.v1", "kind": "prompt", "scope": scope,
-    "seat": seat, "beat": view.beat, "attempt": attempt,
-    "prompt_template": promptMetadata(view.config, system, user),
-    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
-
 proc decideAll*(client: LlmClient, view: Sim, seats: seq[int],
     prompts: seq[string], scripted: seq[ScriptKind],
-    sleepFor: proc (seconds: float) {.closure.} = nil): DecisionBatch =
-  ## One decision per seat plus private prompt intent. Provider failures fall
-  ## back to reciprocator; game-owned prompt rendering errors propagate.
-  result.decisions = newSeq[Decision](seats.len)
+    sleepFor: proc (seconds: float) {.closure.} = nil): seq[Decision] =
+  ## One decision per seat in `seats`, in order. NEVER raises: any failure
+  ## falls back to the scripted move so the episode always advances.
+  result = newSeq[Decision](seats.len)
   var open: seq[int]
   for index, seat in seats:
-    let obs = view.buildObservation(seat)
-    result.promptEvidence.add(promptRecord(view, seat, 0, "configured_prompt",
-      systemPrompt(obs, view.config),
-      userPrompt(obs, (if seat < prompts.len: prompts[seat] else: ""))))
     let kind = if seat < scripted.len: scripted[seat] else: skNone
     if kind != skNone:
-      result.decisions[index] = scriptedDecision(view, seat, kind)
+      result[index] = scriptedDecision(view, seat, kind)
     elif client.disabled:
-      result.decisions[index] = fallbackDecision(view, seat, osFallback)
+      result[index] = fallbackDecision(view, seat, osFallback)
     else:
       open.add(index)
   if open.len == 0:
@@ -450,9 +428,7 @@ proc decideAll*(client: LlmClient, view: Sim, seats: seq[int],
           (if seat < prompts.len: prompts[seat] else: ""))
         if attempt > 0:
           user.add(RetryHint)
-        let system = systemPrompt(obs, view.config)
-        result.promptEvidence.add(promptRecord(view, seat, attempt, "request", system, user))
-        let request = client.requestFor(system, user, seat)
+        let request = client.requestFor(systemPrompt(obs, view.config), user, seat)
         batch.post(request.url, request.headers, request.body, $index)
       let responses = client.curl.makeRequests(batch, client.timeoutSeconds)
       let latency = int((epochTime() - started) * 1000.0)
@@ -466,7 +442,7 @@ proc decideAll*(client: LlmClient, view: Sim, seats: seq[int],
           var decision = parseDecision(extractJsonObject(text))
           decision.source = if attempt == 0: osLlm else: osRetry
           decision.latencyMs = latency
-          result.decisions[index] = decision
+          result[index] = decision
         except CatchableError as error:
           echo "coins llm: seat ", seat, " attempt ", attempt, " failed: ",
             error.msg
@@ -478,4 +454,4 @@ proc decideAll*(client: LlmClient, view: Sim, seats: seq[int],
   for index in open:
     let seat = seats[index]
     echo "coins llm: seat ", seat, " falling back to scripted intent"
-    result.decisions[index] = fallbackDecision(view, seat, osFallback)
+    result[index] = fallbackDecision(view, seat, osFallback)

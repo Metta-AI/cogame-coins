@@ -105,7 +105,7 @@ block:
   var decisions: seq[Decision]
   let started = epochTime()
   check(not raises(proc () =
-    decisions = client.decideAll(sim, seats, prompts, kinds).decisions),
+    decisions = client.decideAll(sim, seats, prompts, kinds)),
     "decideAll never raises")
   check(decisions.len == 2, "one decision per seat")
   for decision in decisions:
@@ -124,7 +124,7 @@ block:
   var sim = initSim(config())
   let before = client.batchStarts.len
   let decisions = client.decideAll(sim, @[0, 1], @["", ""],
-    @[skHonest, skGreedy]).decisions
+    @[skHonest, skGreedy])
   check(decisions.len == 2, "two decisions")
   check(decisions[0].source == osScripted and decisions[1].source == osScripted,
     "both seats are scripted")

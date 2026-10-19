@@ -107,7 +107,10 @@ when isMainModule:
       for key in ["promptVariant", "promptSeed"]:
         if request.hasKey(key): runtimeConfig[key] = request[key]
       config.update($runtimeConfig)
-      if config.selectedPromptVariant in {pvHeldoutBriefing, pvHeldoutReference}:
+      let split = if request.hasKey("split"): request["split"].getStr() else: "train"
+      if split notin ["train", "validation", "test"]:
+        raise newException(CoinsError, "unknown prompt split")
+      if split == "train" and config.selectedPromptVariant in {pvHeldoutBriefing, pvHeldoutReference}:
         raise newException(CoinsError, "held-out wording cannot enter training")
       game = initSim(config)
       seat = 0

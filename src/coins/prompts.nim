@@ -1,9 +1,9 @@
-## Episode wording and private message hashes, independent of music RNG.
+## Episode wording and private message hashes, independent of game RNG.
 import std/[json, strutils]
 import crunchy
 import sim_config
 
-const PromptBankVersion* = "coins-rules-v1"
+const PromptBankVersion* = "coins-rules-v2"
 const Templates = [
   staticRead("prompts/plain.txt"), staticRead("prompts/numbered.txt"),
   staticRead("prompts/questions.txt"), staticRead("prompts/reordered.txt"),

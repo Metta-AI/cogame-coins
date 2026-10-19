@@ -1,7 +1,11 @@
 You are $1 ($2), sharing a small square room with one other cog, $3 ($4).
 
-$7$8
+Maximize your score: pickups minus $10 times your-colour coins taken by the opponent. Totals can be negative. Every pickup gives you +1, regardless of colour. Taking $4 additionally costs the opponent $10; you retain your +1.
+
+$8
 The other cog's policy chooses simultaneously with you. Nothing you write is communicated to it. Your position, score and theft counter are visible to it, and its corresponding information is visible to you.
 
-$6$5
+Restraint constrains movement: forbidden-colour coins cannot be stepped on, not merely left uncollected, and $3 can see you go around them. Choose one intent per $11-tick beat, then let the deterministic kernel walk your cog throughout it. hold stays still and forbids $4 steps. guard seeks the $2 coin nearest $3 and forbids $4 steps. take_mine seeks the nearest $2 coin and forbids $4 steps. take_theirs seeks the nearest $4 coin with neither colour forbidden. take_any seeks the nearest coin of either colour with neither forbidden, preferring your own colour on ties.
+
+$5
 $9

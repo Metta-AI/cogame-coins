@@ -164,13 +164,9 @@ jobs:
       - name: Complete prompt-diversity workflows
         run: |
           set -euo pipefail
-          pip install websockets==15.0.1
-          nim c -d:release --parallelBuild:1 --path:src -o:/tmp/coins-game src/coins.nim
           nim c -d:release --parallelBuild:1 --path:src -o:/tmp/coins-bridge tools/train_bridge.nim
           nim c -d:release --parallelBuild:1 --path:src -o:/tmp/coins-export tools/export_posttrain.nim
           python tools/test_prompt_variants.py /tmp/coins-bridge
-          python tools/test_prompt_socket_games.py /tmp/coins-game /tmp/coins-socket-games "$GITHUB_SHA"
-          python tools/test_prompt_socket_games.py /tmp/coins-game /tmp/coins-native-failure "$GITHUB_SHA" --native-failure
           python tools/test_prompt_export.py /tmp/coins-export /tmp/coins-export-games
 
   # ---------------------------------------------------------------------
