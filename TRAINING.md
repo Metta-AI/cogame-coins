@@ -19,14 +19,9 @@ the simulator. Entire episodes stay in one split. The manifest records source
 revision, variant, scores, wins, and row counts. Existing output directories
 are never overwritten.
 
-Train an output with Metta post-training:
+Use the [post-training research package](https://github.com/Metta-AI/posttraining-research/tree/main/packages/metta-posttraining)
+for current training and adapter-packaging workflows.
 
-```sh
-nix develop -c uv run --package metta-posttrain --extra train \
-  python -m metta_posttrain.train --dataset /tmp/coins-standard \
-  --output /tmp/coins-adapter --model Qwen/Qwen3-0.6B \
-  --max-steps 100 --max-length 4096
-```
 
 Ten complete episodes yielded 268 training and 74 validation examples for
 standard, 356 and 86 for long-shadow, 130 and 42 for short-fuse, 268 and 74
@@ -67,3 +62,10 @@ reloaded each checkpoint for held-out seeds 101 and 102:
 
 These short pilots verify training, checkpoint reload, and evaluation. They do
 not establish competitive policies.
+
+## Matched prompt collections
+
+Append `FIRST_PROMPT_SEED` to the exporter command to cycle training wordings
+separately within each split. Omitting it uses the manifest prompt configuration.
+Episode IDs include requested selection, resolved wording, and prompt seed for
+both paths. Scenario-family IDs stay unchanged across matched collections.

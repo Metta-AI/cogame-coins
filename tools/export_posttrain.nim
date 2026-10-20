@@ -55,7 +55,7 @@ when isMainModule:
     config.seed = seed
     var sim = initSim(config)
     let episode = "coins-" & variant & "-" & $seed &
-      (if mixed: "-" & $config.selectedPromptVariant else: "")
+      "-" & $config.promptVariant & "-" & $config.selectedPromptVariant & "-" & $config.promptSeed
     let family = "coins-" & $seed
     var rows: seq[string]
     proc now(): float {.closure.} = 0.0
