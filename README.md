@@ -190,3 +190,57 @@ tools/build_replay_viewer.sh "$PWD/dist/static-replay-viewer"
 
 The design note this repo implements is
 [`docs/plans/2026-08-24-coins-design.md`](docs/plans/2026-08-24-coins-design.md).
+
+## Episode prompt diversity
+
+Bank `coins-rules-v2` contains five training wordings: `canonical`, `plain`,
+`numbered`, `questions`, and `reordered`. Set `promptVariant` to pin one,
+or use `mixed` with an explicit nonnegative integer `promptSeed`. Mixed
+selection uses `promptSeed mod 5` without consuming game randomness.
+Defaults remain canonical. Reserve `heldout-briefing` and
+`heldout-reference` for evaluation; training rejects both.
+
+The selected template stays fixed for an episode. Rendered system text does
+not: it includes the current beat and ending information. Hash exact messages
+at every decision. Movement and scoring explanations vary. Named sections preserve room mechanics,
+ending rules, and the response contract without slicing rendered strings. Operator strategy stays
+separate. Bump the bank version when wording changes. Speech stays spectator-only;
+notes stay seat-private.
+
+External `coins.player.v2` observation frames include system/user `messages`
+and private `observation.prompt_template`. Metadata identifies `bank`,
+resolved `variant`, requested `selection`, `seed`, and exact UTF-8
+`system_sha256`/`user_sha256` hashes. Ordinary state frames, results, and
+public replays omit the new metadata and prompt records.
+
+Compile `tools/train_bridge.nim` with `nim c --path:src`. Launch
+`tools/train_bridge coworld_manifest_template.json standard --language` for
+text policies. Teacher replies include intent, spectator speech, and private
+notes. Omit `--language` for the existing numeric action interface. Reset
+accepts `promptVariant`, `promptSeed`, and `split` (train, validation, or test). Both interfaces attach private
+metadata at `semantic_view.prompt_template`.
+
+Compile `tools/export_posttrain.nim`, then run from a clean committed checkout:
+
+```bash
+tools/export_posttrain OUTPUT 10 1 standard 0
+```
+
+The final argument cycles through the five training wordings independently in
+each split, within the requested game count. Omit it for canonical export. All wordings and variants
+share the family `coins-<seed>`. Seeds divisible by five enter validation; others
+enter training. Preserve that assignment when combining corpora.
+The manifest pins source, teacher, bank, wording, ending reason, beats, and scores.
+
+Complete-flow checks use real binaries and ordinary game budgets:
+
+```bash
+python tools/test_prompt_variants.py /absolute/path/to/bridge
+python tools/test_prompt_export.py /absolute/path/to/export /new/private/output
+```
+
+For a model study, freeze source, model, operator strategy, variants, game seeds,
+seats, opponents, and budgets before comparing canonical-trained and mixed-trained
+policies on held-out wordings. Report scores, invalid actions, retries, fallbacks,
+ending reasons, and completion rates. Scripted invariance does not establish
+improved learning or reduced model collapse.

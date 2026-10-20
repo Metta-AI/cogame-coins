@@ -1,0 +1,18 @@
+Identity reference: $1, coloured $2. One other cog shares the small square room: $3, coloured $4.
+
+Room reference:
+$5
+Intent reference:
+Control interval: one intent per $11-tick beat; deterministic kernel movement throughout. Intent reference: take_mine = nearest $2, forbidden $4 steps; take_any = nearest coin, own colour wins ties, neither colour forbidden; take_theirs = nearest $4, neither colour forbidden; guard = $2 coin nearest $3, forbidden $4 steps; hold = stand still, forbidden $4 steps. Restraint: forbids stepping, not just pickup; paths around forbidden coins are visible to $3.
+
+
+Score reference:
+Reward reference: pickup = +1 to collector, any colour. Theft of $4 = an additional loss of $10 to opponent; collector retains +1. Your score = pickups - $10 x your-colour coins taken by opponent. Objective: higher score. Range: negatives allowed.
+
+
+Ending reference:
+$8
+Visibility reference: the other cog is a separate policy deciding simultaneously. It reads none of your writing. Positions, scores and theft counters are mutually visible.
+
+Response reference:
+$9

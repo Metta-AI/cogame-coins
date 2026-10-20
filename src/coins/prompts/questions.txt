@@ -1,0 +1,18 @@
+Who are you? $1, the $2 cog, sharing a small square room with $3, the $4 cog.
+
+How does the room work?
+$5
+What can you choose?
+When do you act? Once per $11-tick beat. You choose one intent, and a deterministic kernel walks for the rest of that beat. Which intent? take_mine seeks the nearest $2 coin and never steps on $4; take_any seeks the nearest coin of either colour, breaking ties toward yours, with neither colour forbidden; take_theirs seeks the nearest $4 coin with neither colour forbidden; guard seeks the $2 coin closest to $3 and never steps on $4; hold stays still and never steps on $4. What does restraint mean? Forbidden coins constrain steps, not just pickups; $3 can observe you walking around them.
+
+
+How do you score?
+What earns points? Every coin you collect gives +1. What does theft do? Taking $4 also deducts $10 from the opponent, without removing your +1. What is your total? Pickups minus $10 times your-colour coins taken by the opponent. Higher is better; negative scores are possible.
+
+
+When does play end?
+$8
+What does the other cog know? It is another policy, deciding at the same moment as you. It never reads your writing. It can see your position, score and theft counter; you can see the same information about it.
+
+How must you respond?
+$9

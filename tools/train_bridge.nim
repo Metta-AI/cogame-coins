@@ -13,8 +13,13 @@ proc seedOf(value: string): int =
     hash = (hash xor uint32(ord(ch))) * 16777619'u32
   int(hash and 0x7fffffff'u32)
 
+var languageMode = false
+
 proc decision(game: Sim, seat, id: int): JsonNode =
   let state = buildObservation(game, seat)
+  let system = systemPrompt(state, game.config)
+  let user = userPrompt(state, OperatorPrompt)
+  state["prompt_template"] = promptMetadata(game.config, system, user)
   %*{
     "kind": "decision",
     "game": "coins",
@@ -25,12 +30,13 @@ proc decision(game: Sim, seat, id: int): JsonNode =
     "semantic_view": state,
     "inbox": [],
     "messages": [
-      {"role": "system", "content": systemPrompt(state)},
-      {"role": "user", "content": userPrompt(state, OperatorPrompt)}
+      {"role": "system", "content": system},
+      {"role": "user", "content": user}
     ],
     "speech_messages": [],
     "action_schema": {"type": "object", "required": ["intent"]},
-    "typed_question": newJNull()
+    "typed_question": newJNull(),
+    "inference_mode": (if languageMode: %"text_action" else: newJNull())
   }
 
 proc encoding(game: Sim, seat, id: int): JsonNode =
@@ -72,9 +78,12 @@ proc encoding(game: Sim, seat, id: int): JsonNode =
 
 when isMainModule:
   let args = commandLineParams()
-  if args.len notin 1 .. 2:
-    quit("usage: coins-train-bridge MANIFEST [VARIANT]", 1)
-  let variant = if args.len == 2: args[1] else: "standard"
+  if args.len notin 1 .. 3:
+    quit("usage: coins-train-bridge MANIFEST [VARIANT [--language]]", 1)
+  let variant = if args.len >= 2: args[1] else: "standard"
+  if args.len == 3:
+    doAssert args[2] == "--language"
+    languageMode = true
   let manifest = parseFile(args[0])
   var variantConfig: JsonNode
   for entry in manifest["variants"]:
@@ -95,7 +104,14 @@ when isMainModule:
       let runtimeConfig = copy(variantConfig)
       runtimeConfig["tokens"] = %*["t0", "t1"]
       runtimeConfig["seed"] = %seedOf(request["seed"].getStr())
+      for key in ["promptVariant", "promptSeed"]:
+        if request.hasKey(key): runtimeConfig[key] = request[key]
       config.update($runtimeConfig)
+      let split = if request.hasKey("split"): request["split"].getStr() else: "train"
+      if split notin ["train", "validation", "test"]:
+        raise newException(CoinsError, "unknown prompt split")
+      if split == "train" and config.selectedPromptVariant in {pvHeldoutBriefing, pvHeldoutReference}:
+        raise newException(CoinsError, "held-out wording cannot enter training")
       game = initSim(config)
       seat = 0
       id = 0
@@ -107,7 +123,11 @@ when isMainModule:
       doAssert not game.finished
       let intent = scriptedIntent(skReciprocator, buildObservation(game, seat),
         game.config.punishThreshold, game.config.punishBeats)
-      response = %*{"response": $(%*{"intent": $intent})}
+      let action = %*{"intent": $intent}
+      if languageMode:
+        action["say"] = %""
+        action["notes"] = %""
+      response = %*{"response": $action}
     of "step":
       doAssert not game.finished and request["decision_id"].getInt() == id
       let action = parseJson(request["response"].getStr())

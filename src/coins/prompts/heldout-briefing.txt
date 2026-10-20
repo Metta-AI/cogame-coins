@@ -1,0 +1,18 @@
+Briefing for $1, the $2 cog: there is one other cog in this small square room, $3 ($4).
+
+Room briefing:
+$5
+Control briefing:
+Movement briefing: each beat spans $11 ticks. Give one intent, not individual steps; a deterministic kernel walks your cog for that beat. For take_mine, approach the nearest $2 coin without stepping on $4. For take_any, approach the nearest coin of either colour, preferring your colour on ties, with neither colour forbidden. For take_theirs, approach the nearest $4 coin with neither colour forbidden. For guard, approach the $2 coin nearest $3 without stepping on $4. For hold, stand still and do not step on $4. Avoidance is a rule about movement, not only collection, so $3 sees your path around its coins.
+
+
+Scoring briefing:
+Reward briefing: collect any coin for +1. If it is $4, the opponent also loses $10; your +1 is unchanged. Your total equals pickups minus $10 times the count of your-colour coins the opponent collected. A higher total is better, even when totals are negative.
+
+
+Duration briefing:
+$8
+Information briefing: the other cog is another policy acting at the same moment. It never reads anything you write. It observes your position, score and theft counter, and you observe its equivalent information.
+
+Reply briefing:
+$9

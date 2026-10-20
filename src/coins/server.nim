@@ -296,9 +296,13 @@ proc runGame(cfg: RuntimeConfig) {.gcsafe.} =
         shared.pendingActions = newSeq[JsonNode](shared.seats)
         for seat in seats:
           if external[seat] and shared.playerSockets.hasKey(seat):
+            let observation = view.buildObservation(seat)
+            let system = systemPrompt(observation, view.config)
+            let user = userPrompt(observation, prompts[seat])
+            observation["prompt_template"] = promptMetadata(view.config, system, user)
             shared.playerSockets[seat].send($ %*{
-              "type": "observation", "id": decisionId,
-              "observation": view.buildObservation(seat)})
+              "type": "observation", "id": decisionId, "observation": observation,
+              "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]})
       result = client.decideAll(view, seats, prompts, kinds,
         proc (seconds: float) {.closure.} = sleep(int(seconds * 1000.0)))
       if external.anyIt(it):
