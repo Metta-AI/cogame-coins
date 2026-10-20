@@ -38,14 +38,17 @@ when isMainModule:
     trainRows: seq[string]
     validationRows: seq[string]
     runs = newJArray()
+    wordingCounts: array[2, int]
   for index in 0 ..< episodes:
     let seed = firstSeed + index
+    let partition = ord(seed mod 5 == 0)
     var config = defaultGameConfig()
     let runtimeConfig = copy(variantConfig)
     runtimeConfig["tokens"] = %["t0", "t1"]
     if mixed:
       runtimeConfig["promptVariant"] = %"mixed"
-      runtimeConfig["promptSeed"] = %(firstPromptSeed + index)
+      runtimeConfig["promptSeed"] = %(firstPromptSeed + wordingCounts[partition])
+      inc wordingCounts[partition]
     config.update($runtimeConfig)
     doAssert config.selectedPromptVariant notin {pvHeldoutBriefing, pvHeldoutReference},
       "held-out wording cannot enter a teacher corpus"

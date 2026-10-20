@@ -226,8 +226,8 @@ Compile `tools/export_posttrain.nim`, then run from a clean committed checkout:
 tools/export_posttrain OUTPUT 10 1 standard 0
 ```
 
-The final argument cycles through five consecutive training wordings within the
-requested game count. Omit it for canonical export. All wordings and variants
+The final argument cycles through the five training wordings independently in
+each split, within the requested game count. Omit it for canonical export. All wordings and variants
 share the family `coins-<seed>`. Seeds divisible by five enter validation; others
 enter training. Preserve that assignment when combining corpora.
 The manifest pins source, teacher, bank, wording, ending reason, beats, and scores.
