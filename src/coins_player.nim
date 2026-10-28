@@ -8,8 +8,7 @@
 ##
 ## To field your own policy, reuse this image and set PLAYER_PROMPT:
 ##   coworld upload-policy <coins-image> --name my-coins \
-##     --run /bin/coins-player --secret-env PLAYER_PROMPT="<your strategy>" \
-##     --secret-env USE_BEDROCK=true
+##     --run /bin/coins-player --secret-env PLAYER_PROMPT="<your strategy>"
 
 import
   std/[json, options, os, strutils],

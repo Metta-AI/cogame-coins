@@ -26,13 +26,16 @@ Higher score wins. Scores are whole integers and can go negative.
 
 ## Prompt, scripted, and external policies
 
+For authentic model posttraining, the production game can write private native
+decision evidence to `COGAME_SAVE_TRAJECTORY_URI`. See [the capture workflow](TRAINING.md)
+for receipt admission, applied-action joins and exclusions.
+
 The image supports prompt, scripted, and external action policies:
 
 ```bash
 coworld upload-policy <coins-image> --name my-coins \
   --run /bin/coins-player \
-  --secret-env PLAYER_PROMPT="<your strategy>" \
-  --secret-env USE_BEDROCK=true
+  --secret-env PLAYER_PROMPT="<your strategy>"
 ```
 
 `PLAYER_SCRIPTED=honest|greedy|reciprocator|tit-for-tat` registers the seat

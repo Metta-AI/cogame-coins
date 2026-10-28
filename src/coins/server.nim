@@ -26,7 +26,7 @@ import curly
 import mummy
 import mummy/routers
 import sim_types, sim, scripted, llm, broadcast, global, replays,
-  wire_constants
+  wire_constants, training
 
 const
   PlayerProtocol = "coins.player.v2"
@@ -34,6 +34,7 @@ const
 
 type
   ServerState = object
+    trajectory: DecisionTrajectory
     prompts: seq[string]
     scripted: seq[ScriptKind]
     external: seq[bool]
@@ -186,6 +187,7 @@ proc finishEpisode() =
     shared.finished = true
     results = gameSim.resultsJson()
     replayData = replayBytes(gameSim)
+    shared.trajectory.finishNativeTrajectory(gameSim)
     broadcastFinal(results)
     pushGlobalLocked(newJArray())
   sleep(500)
@@ -267,6 +269,9 @@ proc runGame(cfg: RuntimeConfig) {.gcsafe.} =
     proc now(): float {.closure.} = epochTime() - gameStart
 
     var lastExternalAt = -1.0
+    var captureViews: seq[JsonNode]
+    var captureEvidence: seq[seq[DecisionAttempt]]
+    var captureBeat = 0
     proc decide(view: Sim, seats: seq[int]): seq[Decision] {.closure.} =
       var prompts: seq[string]
       var kinds: seq[ScriptKind]
@@ -303,8 +308,13 @@ proc runGame(cfg: RuntimeConfig) {.gcsafe.} =
             shared.playerSockets[seat].send($ %*{
               "type": "observation", "id": decisionId, "observation": observation,
               "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]})
+      if not shared.trajectory.isNil:
+        captureViews.setLen(0)
+        captureBeat = view.beat
+        for seat in 0 ..< Seats: captureViews.add(view.buildObservation(seat))
       result = client.decideAll(view, seats, prompts, kinds,
         proc (seconds: float) {.closure.} = sleep(int(seconds * 1000.0)))
+      if not shared.trajectory.isNil: captureEvidence = client.nativeAttempts
       if external.anyIt(it):
         let started = epochTime()
         let deadline = started + config.llmTimeoutSeconds.float
@@ -329,6 +339,13 @@ proc runGame(cfg: RuntimeConfig) {.gcsafe.} =
               result[index].latencyMs = int((epochTime() - started) * 1000)
 
     proc onBeat(view: Sim) {.closure.} =
+      if not shared.trajectory.isNil:
+        for seat in 0 ..< Seats:
+          let cog = view.cogs[seat]
+          let applied = Decision(intent: cog.intent, say: cog.say, notes: cog.notes,
+            source: cog.source, latencyMs: cog.latencyMs)
+          shared.trajectory.recordAppliedDecision(config, captureBeat, seat,
+            view.policyNames[seat], captureViews[seat], applied, captureEvidence[seat])
       withLock stateLock:
         pushStateFrames()
         pushGlobalLocked(newJArray())
@@ -588,6 +605,7 @@ proc runGameServer*(config: GameConfig, cfg: RuntimeConfig) =
     raise newException(CoinsError, "tokens must name exactly num_agents seats")
   runtimeCfg = cfg
   gameSim = initSim(config)
+  shared.trajectory = initNativeTrajectory(config)
   shared.seats = config.numAgents
   shared.prompts = newSeq[string](shared.seats)
   shared.scripted = newSeq[ScriptKind](shared.seats)
