@@ -19,10 +19,10 @@
 ## deterministic.
 
 import
-  std/[json, os, strutils, times],
+  std/[json, options, os, strutils, times],
   bitworld/runtime,
   curly,
-  sim, scripted, prompts
+  sim, scripted, prompts, training
 
 export prompts
 
@@ -50,6 +50,7 @@ type
     minBeatSeconds: int
     lastBatchAt*: float           ## epochTime of the previous batch start
     batchStarts*: seq[float]      ## every batch start, for the cadence test
+    nativeAttempts*: seq[seq[DecisionAttempt]]
     disabled*: bool
 
 proc resolveApiKey(): string =
@@ -387,6 +388,8 @@ proc decideAll*(client: LlmClient, view: Sim, seats: seq[int],
     sleepFor: proc (seconds: float) {.closure.} = nil): seq[Decision] =
   ## One decision per seat in `seats`, in order. NEVER raises: any failure
   ## falls back to the scripted move so the episode always advances.
+  let capture = getEnv(CogameSaveTrajectoryUriEnv).len > 0
+  if capture: client.nativeAttempts = newSeq[seq[DecisionAttempt]](Seats)
   result = newSeq[Decision](seats.len)
   var open: seq[int]
   for index, seat in seats:
@@ -412,6 +415,8 @@ proc decideAll*(client: LlmClient, view: Sim, seats: seq[int],
       break
     let started = epochTime()
     var stillOpen: seq[int]
+    var pendingEvidence: seq[DecisionAttempt]
+    var recorded = 0
     ## The per-seat `try` below covers everything Coins itself can raise
     ## (transport status, refusal, parse, unknown intent). This outer one
     ## covers the BATCH: building an observation or a request, and
@@ -429,25 +434,47 @@ proc decideAll*(client: LlmClient, view: Sim, seats: seq[int],
         if attempt > 0:
           user.add(RetryHint)
         let request = client.requestFor(systemPrompt(obs, view.config), user, seat)
+        if capture:
+          pendingEvidence.add(nativeAttempt(view.policyNames[seat], view.beat, seat, attempt, request.body))
         batch.post(request.url, request.headers, request.body, $index)
       let responses = client.curl.makeRequests(batch, client.timeoutSeconds)
       let latency = int((epochTime() - started) * 1000.0)
       for position, index in open:
         let seat = seats[index]
+        var evidence: DecisionAttempt
+        if capture: evidence = pendingEvidence[position]
         try:
           if position >= responses.len:
             raise newException(CoinsError, "no response for seat " & $seat)
+          if capture:
+            evidence.receiveNativeResponse(responses[position].response, responses[position].error, latency)
           let text = client.textOf(responses[position].response,
             responses[position].error, batch[position].url)
-          var decision = parseDecision(extractJsonObject(text))
+          let payload = extractJsonObject(text)
+          var decision = parseDecision(payload)
+          if capture:
+            evidence.parsedAction = decision.decisionAction()
+            evidence.accepted = payload{"say"}.getStr() == decision.say and
+              payload{"notes"}.getStr() == decision.notes
+            if not evidence.accepted:
+              evidence.rejectionReason = some("native parser normalized speech or notebook")
           decision.source = if attempt == 0: osLlm else: osRetry
           decision.latencyMs = latency
           result[index] = decision
         except CatchableError as error:
+          if capture: evidence.rejectionReason = some(error.msg)
           echo "coins llm: seat ", seat, " attempt ", attempt, " failed: ",
             error.msg
           stillOpen.add(index)
+        if capture:
+          client.nativeAttempts[seat].add(evidence)
+          inc recorded
     except CatchableError as error:
+      if capture:
+        for position in recorded ..< pendingEvidence.len:
+          var evidence = pendingEvidence[position]
+          evidence.rejectionReason = some("batch failure: " & error.msg)
+          client.nativeAttempts[seats[open[position]]].add(evidence)
       echo "coins llm: batch attempt ", attempt, " failed: ", error.msg
       stillOpen = open
     open = stillOpen

@@ -377,7 +377,7 @@
           "title": "Fielding a policy",
           "content": {
             "type": "text",
-            "value": "Three policy forms share this image. PLAYER_SCRIPTED=honest|greedy|reciprocator|tit-for-tat registers an existing deterministic baseline. PLAYER_PROMPT supplies the existing game-hosted prompt policy; USE_BEDROCK=true is required for its Bedrock sidecar. External policies receive seat-private observations and submit legal intents. Other programmatic, neural, or reinforcement learning players can use the same external observation/action messages. The game owns observation visibility, action validation, simultaneous movement, scores, and replay. The optional say field is capped at 48 runes and spectator-only; notes is capped at 300 runes and returned only to the same seat. The opposite seat never receives the other player's intent, say, notes, policy name, or model output."
+            "value": "Three policy forms share this image. PLAYER_SCRIPTED=honest|greedy|reciprocator|tit-for-tat registers an existing deterministic baseline. PLAYER_PROMPT supplies the existing game-hosted prompt policy through the platform-provided LLM sidecar. External policies receive seat-private observations and submit legal intents. Other programmatic, neural, or reinforcement learning players can use the same external observation/action messages. The game owns observation visibility, action validation, simultaneous movement, scores, and replay. The optional say field is capped at 48 runes and spectator-only; notes is capped at 300 runes and returned only to the same seat. The opposite seat never receives the other player's intent, say, notes, policy name, or model output."
           }
         }
       ]

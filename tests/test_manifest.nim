@@ -211,9 +211,8 @@ block:
       "every policy runs the player entrypoint")
     if policy{"env"}.hasKey("PLAYER_PROMPT"):
       prompts.inc
-      check(policy{"env"}{"USE_BEDROCK"}.getStr() == "true",
-        "a prompt policy carries USE_BEDROCK=true or the player pod gets " &
-        "no Bedrock sidecar and the seat silently plays scripted")
+      # The game owns inference through COWORLD_LLM_ENDPOINT. Native full-game
+      # capture tests prove calls without the obsolete player environment flag.
       check(policy{"env"}{"PLAYER_PROMPT"}.getStr().len > 200,
         "a champion prompt is a real strategy")
     if policy{"env"}.hasKey("PLAYER_SCRIPTED"):

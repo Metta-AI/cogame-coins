@@ -1,5 +1,45 @@
 # Metta post-training data
 
+## Native real-model capture
+
+Use the production game and `/bin/coins-player` with `PLAYER_PROMPT` and
+hosted LLM credentials. Omit `PLAYER_SCRIPTED`. The platform supplies the
+sidecar; no unused `USE_BEDROCK` environment flag is needed. Set the private
+`COGAME_SAVE_TRAJECTORY_URI` destination on the game; with no destination,
+capture is disabled.
+
+Capture retains actual parallel Curly request bodies, exposed call-ID headers,
+received response bodies, retries and each seat's beat-opening observation.
+At beat close it joins the decision to the actual applied intent, speech and
+private notebook. Replies normalized by the native rune caps and scripted
+fallbacks are excluded from model targets. Unavailable usage, token identities
+and likelihoods remain unknown. Speech stays spectator-only; the other seat
+never gains access to private evidence. Requests, retry policy, pacing, random
+termination, movement and scoring remain game-owned.
+
+Use the research package's `collect-hosted`, `prepare-hosted-data` and SLIME
+workflow for authenticated receipt admission and token/mask checks. Keep
+`coins-<seed>` families together across variants and wordings; verify actual
+physical scenarios before claiming independent evaluation. Capture alone
+establishes neither strategic strength nor online RL readiness.
+
+The complete native system fixture plays all five ordinary variant horizons
+with capture on/off and a loopback model provider:
+
+```sh
+nim c -d:release --path:src -o:/tmp/coins src/coins.nim
+nim c -d:release --path:src -o:/tmp/coins-player src/coins_player.nim
+python3 tools/test_native_capture.py /tmp/coins /tmp/coins-player /tmp/coins-native-capture
+```
+
+It checks applied-action/replay joins, private operator isolation, retries,
+fallback, normalization, missing usage and offline no-evidence fallback. Outcomes and physical replays agree
+across capture modes; measured wall-clock latency is retained in raw artifacts
+and omitted only from the parity comparison. Fixture replies are software
+tests, not training teachers. Output directories must be new.
+
+## Historical scripted teacher
+
 The native simulator and published `reciprocator` policy export supervised
 examples for all five certified variants:
 
